@@ -1,0 +1,14 @@
+[Unit]
+Description=BMS Laravel Queue Worker
+After=network.target postgresql.service
+
+[Service]
+User=www-data
+Group=www-data
+Restart=always
+RestartSec=5
+WorkingDirectory=/var/www/bms
+ExecStart=/usr/bin/php artisan queue:work database --sleep=3 --tries=3 --max-time=3600
+
+[Install]
+WantedBy=multi-user.target

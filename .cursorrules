@@ -1,0 +1,267 @@
+PRODUCT REQUIREMENT DOCUMENT (PRD)
+
+0. Bahasa Antarmuka (WAJIB)
+Semua pesan API, validasi, error, label, seeder, dan respons JSON yang ditujukan ke pengguna wajib berbahasa Indonesia.
+Kode internal (nama class, variabel, route path) boleh tetap bahasa Inggris sesuai konvensi Laravel.
+
+1. Project Overview
+Nama Produk: BMS — Belawa Management System (sebelumnya Multi-Branch Financial Tracker API).
+Tujuan Proyek: Sistem terpusat multi-cabang untuk:
+- Keuangan kas (transaksi, akun, rekonsiliasi, transfer, kunci periode).
+- Operasional konter (catatan servis, target closingan, gaji).
+- Operasional bengkel (upah kerja mingguan per teknisi).
+- SDM (data karyawan, absensi).
+- Laporan & dasbor agregat.
+Target Pengguna: Super Admin (Owner) dan Admin Cabang.
+Cabang awal (seed): Sawai, Waebulen, Bengkel Belawa, Lukulamo (tipe konter/bengkel via branch_types).
+
+2. Tech Stack & Architecture
+Framework Back-end: Laravel (API Mode / Stateless Bearer Token).
+Frontend: SPA Vue (CDN) di /app/ yang mengonsumsi REST API via Sanctum token (bukan session Blade sebagai UI utama).
+Database: PostgreSQL (ACID + foreign key ketat).
+Autentikasi API: Laravel Sanctum (Token-based).
+PDF Laporan: DomPDF (barryvdh/laravel-dompdf) via signed URL sementara.
+Integrasi Pihak Ketiga:
+- n8n: Menerima webhook outbound dari Laravel (N8N_WEBHOOK_URL) untuk notifikasi transfer pending dan alert selisih rekonsiliasi; akses DB n8n (jika dipakai) wajib user PostgreSQL terpisah dengan hak terbatas.
+- WAHA (WhatsApp HTTP API): Diorkestrasi melalui n8n (bukan langsung dari Laravel pada tahap ini).
+
+3. User Roles & Permissions
+Multi-Tenancy Scoping di tingkat API + tipe cabang (konter vs bengkel).
+Tipe cabang ditentukan oleh branch_types.allows_service:
+- allows_service = true → Konter (boleh modul servis, closing, gaji konter).
+- allows_service = false → Bengkel (boleh modul upah kerja; tidak boleh input servis/closing).
+
+A. Super Admin / Owner (Global Scope)
+- Mengelola cabang, tipe cabang, akun global, admin cabang, kategori, karyawan.
+- Melihat dasbor agregat seluruh cabang (filter bulan/tahun/cabang).
+- Mengunci/membuka periode pembukuan bulanan.
+- Membuat jurnal penyesuaian saldo (adjustments).
+- Menyetujui/menolak transfer lintas cabang (konfirmasi kata sandi Owner).
+- Gaji Konter (payroll): hitung, simpan manual, kunci/buka — owner only.
+- Upah Bengkel: lihat semua cabang bengkel; boleh reopen minggu lunas.
+- Semua jenis laporan (termasuk gaji).
+
+B. Admin Cabang (Isolated Scope)
+- Transaksi, rekonsiliasi, transfer internal/antar cabang (request), akun/kategori cabang sesuai hak.
+- Absensi karyawan cabangnya.
+- Jika cabang konter: Catatan Servis, Target Closingan (bukan Gaji Konter).
+- Jika cabang bengkel: Upah Kerja (input job, tandai minggu lunas); bukan servis/closing/gaji.
+- Laporan sesuai tipe cabang (servis/closing hanya konter; upah hanya bengkel; gaji tidak untuk admin).
+Batasan: 403 Forbidden jika memodifikasi periode terkunci, mengakses cabang lain, atau membuka modul yang tidak sesuai tipe cabang.
+
+4. Functional Requirements (API Endpoints)
+
+A. Autentikasi (/api/auth)
+POST /api/auth/login → Token bearer Sanctum (throttle).
+GET /api/auth/demo-accounts → Daftar akun uji (jika diaktifkan).
+POST /api/auth/logout → Hapus token aktif.
+GET /api/auth/me → Profil user login (+ branch + allows_service).
+POST /api/auth/confirm-password → Validasi ulang kata sandi (approve transfer); tidak menerbitkan token baru.
+
+B. Cabang, Tipe Cabang & Admin [Owner untuk tulis]
+GET/POST/PUT /api/branches
+GET/POST/PUT/DELETE /api/branch-types
+PUT /api/branch-types/{id}/accounts → Sync akun default per tipe.
+GET /api/branches/{id}/account-settings ; PUT /api/branches/{id}/accounts
+GET/POST/PUT /api/admins
+
+C. Akun, Saldo Awal & Kategori
+GET/POST/PUT/DELETE /api/accounts (hapus: owner)
+GET/PUT /api/opening-balances → Saldo awal per akun×cabang (+ tanggal efektif)
+GET/POST/PUT /api/categories → Kategori global (owner) / lokal cabang (admin) sesuai aturan scope
+
+D. Transaksi
+GET/POST/PUT/DELETE /api/transactions
+Aturan: wajib category_id + account_id; kunci periode → 403 jika tanggal pada bulan is_locked.
+Audit Log untuk CREATE/UPDATE/DELETE transaksi.
+
+E. Transfer Dana
+POST /api/transfers/internal → Mutasi antar akun dalam cabang (pasangan expense+income amount sama).
+POST /api/transfers/inter-branch/request → PENDING; reason opsional; webhook Owner.
+POST /api/transfers/inter-branch/{id}/approve [Owner] → APPROVED + mutasi (DB transaction); frontend wajib confirm-password.
+POST /api/transfers/inter-branch/{id}/reject [Owner] → REJECTED + rejection_reason wajib.
+
+F. Kontrol Finansial
+GET/POST /api/period-locks [Owner]
+POST /api/reconciliations → Selisih fisik vs sistem; ≠0 → webhook n8n. Rekonsiliasi per akun.
+POST /api/adjustments [Owner] → Jurnal penyesuaian (wajib reason).
+
+G. Dasbor
+GET /api/dashboard/owner [Owner]
+  Filter: year, month, branch_id (opsional).
+  Metrik: omzet/beban/profit/saldo + vs bulan lalu; service summary (konter);
+  payroll summary; closing vs target; absensi hari ini; upah bengkel minggu ini;
+  chart komparasi/arus kas; top kategori; transfer pending; alert selisih; saldo per cabang/akun.
+GET /api/dashboard/branch
+  Saldo, omzet/beban bulan ini, status rekonsiliasi (dicek hari ini / akun stale),
+  absensi hari ini; konter: service + closing + net profit; bengkel: upah minggu ini;
+  saldo per akun; top kategori; log transaksi terakhir; banner kunci periode.
+
+H. Karyawan & Absensi
+GET/POST/PUT/DELETE /api/employees [tulis: Owner]
+GET/PUT /api/attendance/daily → Absensi harian (present|leave|sick|absent)
+GET /api/attendance/board → Rekap bulanan H/I/S/A
+Akses: Owner semua cabang; Admin hanya cabangnya.
+
+I. Konter — Catatan Servis (hanya cabang allows_service)
+GET/POST/PUT/DELETE /api/service-records
+Field: employee_id (teknisi), service_date, brand, device_type, damage, cost, price, profit(=price−cost), notes.
+Admin bengkel: 403.
+
+J. Konter — Target Closingan (hanya cabang allows_service)
+GET /api/closings/board → Board bulanan qty vs target per karyawan non-manajemen.
+PUT /api/closings/targets → Target bulanan per karyawan.
+PUT /api/closings/daily → Qty closing harian.
+Admin bengkel: 403.
+
+K. Konter — Gaji (Payroll) [Owner only]
+GET /api/payrolls/board → Board bulanan per cabang konter.
+PUT /api/payrolls/save → Simpan/hitung ulang + field manual (acc, bonus, hutang, pengeluaran, note).
+POST /api/payrolls/lock | /unlock
+GET /api/payrolls/detail
+Rumus (v1):
+- Gapok = present_days × 50.000 (promotor = 0)
+- Insentif HP = closing_qty × 10.000
+- Insentif Service = 50% × service_profit (teknisi/service)
+- Total = gapok + HP + service + acc + bonus − hutang − pengeluaran
+Status: draft | locked. Sumber: absensi + closing + service records.
+
+L. Bengkel — Upah Kerja (hanya cabang !allows_service)
+GET/PUT /api/workshop-wages/settings → % share per teknisi per bulan (default 50%).
+GET/POST/PUT/DELETE /api/workshop-wages/jobs → Job harian (job_type, amount, employee_id).
+GET /api/workshop-wages/weeks | /weeks/detail
+POST /api/workshop-wages/weeks/pay → Tandai minggu (Senin–Minggu) lunas; simpan shares_snapshot.
+POST /api/workshop-wages/weeks/reopen [Owner] → Buka kembali minggu lunas.
+GET /api/workshop-wages/technicians | /job-types
+Aturan: minggu paid → tidak boleh ubah job; upah net = gross × (tech_share_pct/100).
+Admin konter: 403.
+
+M. Laporan (/api/reports)
+GET /api/reports/{type} → JSON preview.
+GET /api/reports/{type}/pdf-link → Signed URL sementara (disposition=attachment|inline).
+GET /api/reports/{type}/pdf-file → File PDF (middleware signed).
+Jenis laporan:
+  Keuangan: ringkasan, kategori, akun, transaksi, transfer, rekonsiliasi
+  Konter: servis, closing, gaji (owner)
+  Bengkel: upah
+  SDM: absensi
+PDF kosong tetap mencetak header BMS + meta periode/cabang + keterangan “tidak ada data”.
+UI: Export PDF = unduh; Buka PDF = tab baru (inline).
+
+5. Database Schema (PostgreSQL) — inti
+A. branch_types — code, name, allows_service, status, …
+B. branches — id, name, type(FK code branch_types), address, status, timestamps
+C. users — id, branch_id(nullable), name, email, password, role(owner|admin), timestamps
+D. accounts — id, name, code, … ; pivot account_branch
+E. account_opening_balances — branch_id, account_id, amount, effective_date, …
+F. categories — id, name, type(income|expense), branch_id(nullable=global), …
+G. transactions — id, branch_id, user_id, category_id, account_id, amount, description, transaction_date, …
+H. inter_branch_transfers — … status(pending|approved|rejected), reason, rejection_reason, account_id, …
+I. reconciliations — branch_id, account_id, user_id, system_balance, physical_balance, difference, reconciliation_date
+J. period_locks — branch_id, period(YYYY-MM), is_locked, locked_by; unique(branch_id, period)
+K. audit_logs — user_id, table_name, record_id, action, old_values, new_values
+L. employees — branch_id, name, phone, position, status(active|inactive), joined_at, notes
+M. employee_attendances — employee_id, attendance_date, status(present|leave|sick|absent), note, input_by; unique(employee_id, date)
+N. employee_daily_closings — employee_id, closing_date, qty, input_by
+O. employee_monthly_targets — employee_id, year, month, target, set_by
+P. service_records — branch_id, employee_id, user_id, service_date, brand, device_type, damage, cost, price, profit, notes
+Q. payrolls — branch_id, employee_id, year, month, status(draft|locked), snapshots & komponen gaji, total, locked_at, …
+R. workshop_jobs — branch_id, employee_id, job_date, job_type, amount, note, input_by
+S. workshop_wage_settings — branch_id, employee_id, year, month, tech_share_pct, set_by
+T. workshop_weeks — branch_id, week_start, week_end, status(open|paid), shares_snapshot(json), paid_at, paid_by
+
+5.1 Relasi Database (FK & batasan unik penting)
+Inti cabang & user
+- branches.type → branch_types.code
+- users.branch_id → branches.id (null = Owner global)
+- period_locks.branch_id → branches.id ; period_locks.locked_by → users.id
+- audit_logs.user_id → users.id
+
+Akun & kategori
+- account_branch: account_id → accounts.id ; branch_id → branches.id (pivot M:N akun×cabang)
+- account_opening_balances: branch_id → branches.id ; account_id → accounts.id ; unique(branch_id, account_id) [atau per effective_date sesuai migrasi]
+- categories.branch_id → branches.id (null = kategori global)
+- (opsional) account_branch_type / sync akun default: account × branch_types
+
+Keuangan
+- transactions.branch_id → branches.id
+- transactions.user_id → users.id ; transactions.updated_by → users.id (jika ada)
+- transactions.category_id → categories.id
+- transactions.account_id → accounts.id
+- inter_branch_transfers.from_branch_id → branches.id ; to_branch_id → branches.id
+- inter_branch_transfers.account_id → accounts.id
+- inter_branch_transfers.requested_by → users.id ; approved_by → users.id
+- reconciliations.branch_id → branches.id ; account_id → accounts.id ; user_id → users.id
+
+SDM
+- employees.branch_id → branches.id
+- employee_attendances.employee_id → employees.id ; input_by → users.id
+  unique(employee_id, attendance_date)
+- employee_daily_closings.employee_id → employees.id ; input_by → users.id
+  unique(employee_id, closing_date)
+- employee_monthly_targets.employee_id → employees.id ; set_by → users.id
+  unique(employee_id, year, month)
+
+Konter
+- service_records.branch_id → branches.id ; employee_id → employees.id ; user_id → users.id
+  (employee harus satu cabang dengan branch_id record)
+- payrolls.branch_id → branches.id ; employee_id → employees.id
+  payrolls.locked_by → users.id ; input_by → users.id
+  unique(branch_id, employee_id, year, month)
+
+Bengkel
+- workshop_jobs.branch_id → branches.id ; employee_id → employees.id ; input_by → users.id
+- workshop_wage_settings.branch_id → branches.id ; employee_id → employees.id ; set_by → users.id
+  unique(branch_id, employee_id, year, month)
+- workshop_weeks.branch_id → branches.id ; paid_by → users.id
+  unique(branch_id, week_start)
+  shares_snapshot = JSON peta employee_id → % (bukan FK baris; snapshot saat pay)
+
+Aturan integritas bisnis (bukan FK, wajib ditegakkan di aplikasi)
+- Admin hanya mengakses/menulis data branch_id miliknya.
+- Modul servis / closing / payroll hanya untuk cabang allows_service=true.
+- Modul workshop_* hanya untuk cabang allows_service=false.
+- Payroll mengambil agregat dari attendances + closings + service_records (tanpa FK langsung ke baris sumber; di-snapshot ke kolom payroll).
+- Upah net dihitung dari workshop_jobs × workshop_wage_settings (atau shares_snapshot jika minggu paid).
+
+6. Non-Functional & Security
+Presisi finansial: NUMERIC/DECIMAL.
+Audit trail: CREATE/UPDATE/DELETE transaksi → audit_logs.
+n8n: N8N_WEBHOOK_URL; user DB terpisah jika akses langsung PostgreSQL.
+CORS: FRONTEND_URL.
+Signed URL PDF: kedaluwarsa singkat (~10 menit); validasi user_id + filter di query.
+Scope cabang & tipe cabang ditegakkan di controller (bukan hanya UI).
+
+7. UI/UX (SPA /app/)
+A. Prinsip: Clean, dashboard-oriented.
+Warna: Hijau #10B981 (pemasukan/approved), Merah #EF4444 (pengeluaran/rejected/selisih), Kuning #F59E0B (pending), Teal #0F766E (brand).
+Owner: desktop/tablet; Admin: mobile-friendly.
+B. Navigasi (urutan alur kerja)
+1. Utama — Dasbor, Transaksi, Rekonsiliasi (+ Akun Cabang / Kategori untuk admin)
+2. Transfer — Antar Akun, Antar Cabang
+3. Konter — Catatan Servis, Target Closingan, Gaji Konter (sesuai hak)
+4. Bengkel — Upah Kerja
+5. Karyawan — Absensi, Data Karyawan (owner)
+6. Laporan — Buat Laporan (tipe disaring per role/cabang)
+7. Sistem [Owner] — Kelola, Penyesuaian, Kunci Periode
+C. Owner Dasbor
+Kartu keuangan + Gaji Konter + Closing/Target + Absensi hari ini + Upah Bengkel minggu ini;
+blok Service per cabang (disembunyikan jika filter cabang bengkel);
+chart; top kategori; transfer pending + alert selisih; saldo per cabang/akun.
+D. Admin Dasbor
+Banner merah baku jika periode terkunci.
+KPI kas + rekonsiliasi + absensi; konter: service/closing/net; bengkel: gross/upah/status minggu;
+saldo per akun; top kategori; log transaksi + pintasan tambah.
+E. Laporan
+Pilih jenis → filter → Tampilkan / Export PDF / Buka PDF.
+Export = unduh file; Buka = tab baru. Data kosong tetap ada header dokumen.
+F. State
+Skeleton loading dasbor; toast sukses/error; toast 403 kunci periode:
+"Aksi Ditolak: Periode pembukuan telah dikunci oleh Owner." (atau pesan API setara).
+
+8. Status Implementasi (referensi)
+[DONE] Auth, cabang, tipe cabang, admin, akun, saldo awal, kategori, transaksi, transfer, rekonsiliasi, kunci periode, adjustments, audit.
+[DONE] Karyawan, absensi, catatan servis, closing/target, gaji konter, upah bengkel.
+[DONE] Dasbor owner/branch diperkaya KPI modul baru.
+[DONE] Laporan multi-jenis + PDF (header wajib meski data kosong).
+[OPTIONAL / BELUM WAJIB] Export CSV/Excel; webhook n8n end-to-end production; WAHA templates.

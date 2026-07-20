@@ -1,0 +1,15 @@
+{
+    "The given data was invalid.": "Data yang diberikan tidak valid.",
+    "(and :count more error)": "(dan :count kesalahan lainnya)",
+    "(and :count more errors)": "(dan :count kesalahan lainnya)",
+    "Unauthenticated.": "Anda belum masuk. Silakan login terlebih dahulu.",
+    "This action is unauthorized.": "Anda tidak memiliki izin untuk melakukan aksi ini.",
+    "Server Error": "Terjadi kesalahan pada server.",
+    "Not Found": "Data tidak ditemukan.",
+    "Page Expired": "Sesi halaman telah berakhir. Muat ulang dan coba lagi.",
+    "Too Many Requests": "Terlalu banyak permintaan. Silakan coba lagi nanti.",
+    "Invalid signature.": "Tanda tangan tautan tidak valid.",
+    "Unauthorized": "Anda belum masuk. Silakan login terlebih dahulu.",
+    "Forbidden": "Anda tidak memiliki izin untuk melakukan aksi ini.",
+    "Service Unavailable": "Layanan sedang tidak tersedia. Silakan coba lagi nanti."
+}
