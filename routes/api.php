@@ -38,7 +38,7 @@ Route::get('/', function () {
             ],
             'cabang' => ['GET /api/branches', 'POST /api/branches', 'PUT /api/branches/{id}'],
             'admin' => ['GET /api/admins', 'POST /api/admins', 'PUT /api/admins/{id}', 'DELETE /api/admins/{id}'],
-            'kategori' => ['GET /api/categories', 'POST /api/categories', 'PUT /api/categories/{id}'],
+            'kategori' => ['GET /api/categories', 'POST /api/categories', 'PUT /api/categories/{id}', 'DELETE /api/categories/{id}'],
             'akun' => ['GET /api/accounts'],
             'transaksi' => [
                 'GET /api/transactions',
@@ -104,6 +104,7 @@ Route::middleware(['auth:sanctum', 'admin.branch'])->group(function () {
     Route::get('/categories', [CategoryController::class, 'index']);
     Route::post('/categories', [CategoryController::class, 'store']);
     Route::put('/categories/{category}', [CategoryController::class, 'update']);
+    Route::delete('/categories/{category}', [CategoryController::class, 'destroy']);
 
     Route::get('/accounts', [AccountController::class, 'index']);
     Route::post('/accounts', [AccountController::class, 'store'])->middleware('role:owner,admin');
