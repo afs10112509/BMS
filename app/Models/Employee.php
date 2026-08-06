@@ -164,7 +164,9 @@ class Employee extends Model
 
     public function scopeWithPosition(Builder $query, string $code): Builder
     {
-        return $query->whereJsonContains('positions', mb_strtolower(trim($code)));
+        $column = $query->getModel()->getTable().'.positions';
+
+        return $query->whereJsonContains($column, mb_strtolower(trim($code)));
     }
 
     public function branch(): BelongsTo
