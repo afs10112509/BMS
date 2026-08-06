@@ -1845,11 +1845,25 @@ createApp({
         params.set('branch_id', String(payrollFilter.branch_id));
       }
       const data = await api(`/payrolls/board?${params.toString()}`);
+      // groups.rows adalah objek yang diedit di UI; samakan data agar save/lock
+      // tidak mengirim salinan lama (insentif_acc/bonus/hutang tetap 0).
+      const groups = data.groups || [];
+      const rows = groups.length
+        ? groups.flatMap((g) => g.rows || [])
+        : (data.data || []);
       payrollBoard.value = {
         meta: data.meta || null,
-        data: data.data || [],
-        groups: data.groups || [],
+        data: rows,
+        groups,
       };
+    }
+
+    function payrollBoardRows() {
+      const groups = payrollBoard.value.groups || [];
+      if (groups.length) {
+        return groups.flatMap((g) => g.rows || []);
+      }
+      return payrollBoard.value.data || [];
     }
 
     async function onPayrollFilterChange() {
@@ -1857,7 +1871,7 @@ createApp({
     }
 
     async function savePayrollBoard() {
-      const allRows = payrollBoard.value.data || [];
+      const allRows = payrollBoardRows();
       const rows = allRows.filter((r) => r.status !== 'locked');
       if (!allRows.length) {
         toast('Tidak ada karyawan untuk digaji.', 'error');
@@ -1910,7 +1924,7 @@ createApp({
     }
 
     async function lockPayrollBoard() {
-      const rows = payrollBoard.value.data || [];
+      const rows = payrollBoardRows();
       if (!rows.length) {
         toast('Tidak ada karyawan untuk dikunci.', 'error');
         return;
