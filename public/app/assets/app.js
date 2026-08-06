@@ -2026,6 +2026,12 @@ createApp({
       payrollDetail.open = false;
     }
 
+    /** Detail gaji: sembunyikan komponen yang nilainya 0 / kosong. */
+    function payrollDetailHas(value) {
+      const n = Number(value);
+      return Number.isFinite(n) && n !== 0;
+    }
+
     function wwBranchParams(extra = {}) {
       const params = new URLSearchParams(extra);
       if (isOwner.value) {
@@ -3776,6 +3782,7 @@ createApp({
       unlockPayrollBoard,
       openPayrollDetail,
       closePayrollDetail,
+      payrollDetailHas,
       onPayrollManualInput,
       onPayrollFocus,
       onPayrollKeydown,
@@ -7141,38 +7148,37 @@ createApp({
             <span class="muted"> · {{ payrollDetail.data.position || '—' }} · {{ payrollDetail.data.branch_name }}</span>
           </p>
           <div class="payroll-detail-grid">
-            <div><span>Hadir</span><strong>{{ payrollDetail.data.present_days }} hari</strong></div>
-            <div><span>Gapok</span><strong>{{ formatRp(payrollDetail.data.gapok) }}</strong></div>
-            <div><span>Qty Closing</span><strong>{{ payrollDetail.data.closing_qty }}</strong></div>
-            <div><span>Insentif HP</span><strong>{{ formatRp(payrollDetail.data.insentif_hp) }}</strong></div>
-            <div><span>Profit Service</span><strong>{{ formatRp(payrollDetail.data.service_profit) }}</strong></div>
-            <div><span>Service 50%</span><strong>{{ formatRp(payrollDetail.data.service_incentive) }}</strong></div>
-            <div><span>Insentif ACC</span><strong>{{ formatRp(payrollDetail.data.insentif_acc) }}</strong></div>
-            <div><span>Bonus</span><strong>{{ formatRp(payrollDetail.data.bonus_absen) }}</strong></div>
-            <div><span>Hutang</span><strong>{{ formatRp(payrollDetail.data.hutang) }}</strong></div>
-            <div><span>Pengeluaran</span><strong>{{ formatRp(payrollDetail.data.pengeluaran) }}</strong></div>
+            <div v-if="payrollDetailHas(payrollDetail.data.present_days)"><span>Hadir</span><strong>{{ payrollDetail.data.present_days }} hari</strong></div>
+            <div v-if="payrollDetailHas(payrollDetail.data.gapok)"><span>Gapok</span><strong>{{ formatRp(payrollDetail.data.gapok) }}</strong></div>
+            <div v-if="payrollDetailHas(payrollDetail.data.closing_qty)"><span>Qty Closing</span><strong>{{ payrollDetail.data.closing_qty }}</strong></div>
+            <div v-if="payrollDetailHas(payrollDetail.data.insentif_hp)"><span>Insentif HP</span><strong>{{ formatRp(payrollDetail.data.insentif_hp) }}</strong></div>
+            <div v-if="payrollDetailHas(payrollDetail.data.service_profit)"><span>Profit Service</span><strong>{{ formatRp(payrollDetail.data.service_profit) }}</strong></div>
+            <div v-if="payrollDetailHas(payrollDetail.data.service_incentive)"><span>Service 50%</span><strong>{{ formatRp(payrollDetail.data.service_incentive) }}</strong></div>
+            <div v-if="payrollDetailHas(payrollDetail.data.insentif_acc)"><span>Insentif ACC</span><strong>{{ formatRp(payrollDetail.data.insentif_acc) }}</strong></div>
+            <div v-if="payrollDetailHas(payrollDetail.data.bonus_absen)"><span>Bonus</span><strong>{{ formatRp(payrollDetail.data.bonus_absen) }}</strong></div>
+            <div v-if="payrollDetailHas(payrollDetail.data.hutang)"><span>Hutang</span><strong>{{ formatRp(payrollDetail.data.hutang) }}</strong></div>
+            <div v-if="payrollDetailHas(payrollDetail.data.pengeluaran)"><span>Pengeluaran</span><strong>{{ formatRp(payrollDetail.data.pengeluaran) }}</strong></div>
             <div class="payroll-detail-total"><span>Total bersih</span><strong>{{ formatRp(payrollDetail.data.total) }}</strong></div>
           </div>
-          <div class="panel-title" style="margin-top:14px">Service bulan ini</div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>Tanggal</th><th>Perangkat</th><th>Modal</th><th>Harga</th><th>Profit</th></tr>
-              </thead>
-              <tbody>
-                <tr v-for="s in payrollDetail.services" :key="s.id">
-                  <td>{{ formatDate(s.service_date) }}</td>
-                  <td>{{ s.brand }} {{ s.device_type }}</td>
-                  <td>{{ formatRp(s.cost) }}</td>
-                  <td>{{ formatRp(s.price) }}</td>
-                  <td>{{ formatRp(s.profit) }}</td>
-                </tr>
-                <tr v-if="!(payrollDetail.services || []).length">
-                  <td colspan="5">Tidak ada catatan servis di periode ini.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <template v-if="(payrollDetail.services || []).length">
+            <div class="panel-title" style="margin-top:14px">Service bulan ini</div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Tanggal</th><th>Perangkat</th><th>Modal</th><th>Harga</th><th>Profit</th></tr>
+                </thead>
+                <tbody>
+                  <tr v-for="s in payrollDetail.services" :key="s.id">
+                    <td>{{ formatDate(s.service_date) }}</td>
+                    <td>{{ s.brand }} {{ s.device_type }}</td>
+                    <td>{{ formatRp(s.cost) }}</td>
+                    <td>{{ formatRp(s.price) }}</td>
+                    <td>{{ formatRp(s.profit) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </template>
         </template>
         <div class="modal-actions">
           <button class="btn btn-ghost" type="button" @click="closePayrollDetail">Tutup</button>
