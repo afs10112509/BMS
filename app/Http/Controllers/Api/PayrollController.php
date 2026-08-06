@@ -60,6 +60,9 @@ class PayrollController extends Controller
             }
 
             $manual = [
+                'gapok' => $payroll !== null
+                    ? (float) $payroll->gapok
+                    : (float) $auto['gapok'],
                 'insentif_acc' => (float) ($payroll?->insentif_acc ?? 0),
                 'bonus_absen' => (float) ($payroll?->bonus_absen ?? 0),
                 'hutang' => (float) ($payroll?->hutang ?? 0),
@@ -68,7 +71,7 @@ class PayrollController extends Controller
             ];
 
             $total = Payroll::computeTotal(
-                $auto['gapok'],
+                $manual['gapok'],
                 $auto['insentif_hp'],
                 $auto['service_incentive'],
                 $manual['insentif_acc'],
@@ -89,7 +92,8 @@ class PayrollController extends Controller
                 'is_technician' => $auto['is_technician'],
                 'status' => Payroll::STATUS_DRAFT,
                 'present_days' => $auto['present_days'],
-                'gapok' => $auto['gapok'],
+                'gapok' => $manual['gapok'],
+                'gapok_auto' => (float) $auto['gapok'],
                 'closing_qty' => $auto['closing_qty'],
                 'insentif_hp' => $auto['insentif_hp'],
                 'service_profit' => $auto['service_profit'],
@@ -138,6 +142,7 @@ class PayrollController extends Controller
             'branch_id' => ['nullable', 'integer', 'exists:branches,id'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.employee_id' => ['required', 'integer', 'exists:employees,id'],
+            'items.*.gapok' => ['nullable', 'numeric', 'min:0'],
             'items.*.insentif_acc' => ['nullable', 'numeric', 'min:0'],
             'items.*.bonus_absen' => ['nullable', 'numeric', 'min:0'],
             'items.*.hutang' => ['nullable', 'numeric', 'min:0'],
@@ -314,6 +319,9 @@ class PayrollController extends Controller
             $bonusAbsen = (float) ($payroll?->bonus_absen ?? 0);
             $hutang = (float) ($payroll?->hutang ?? 0);
             $pengeluaran = (float) ($payroll?->pengeluaran ?? 0);
+            $gapok = $payroll !== null
+                ? (float) $payroll->gapok
+                : (float) $auto['gapok'];
             $row = array_merge([
                 'payroll_id' => $payroll?->id,
                 'employee_id' => $employee->id,
@@ -323,6 +331,8 @@ class PayrollController extends Controller
                 'branch_name' => $employee->branch?->name,
                 'position' => $employee->position,
                 'status' => Payroll::STATUS_DRAFT,
+                'gapok' => $gapok,
+                'gapok_auto' => (float) $auto['gapok'],
                 'insentif_acc' => $insentifAcc,
                 'bonus_absen' => $bonusAbsen,
                 'hutang' => $hutang,
@@ -331,7 +341,7 @@ class PayrollController extends Controller
                 'year' => $year,
                 'month' => $month,
                 'total' => Payroll::computeTotal(
-                    $auto['gapok'],
+                    $gapok,
                     $auto['insentif_hp'],
                     $auto['service_incentive'],
                     $insentifAcc,
@@ -340,6 +350,7 @@ class PayrollController extends Controller
                     $pengeluaran,
                 ),
             ], $auto);
+            $row['gapok'] = $gapok;
         }
 
         $services = ServiceRecord::query()

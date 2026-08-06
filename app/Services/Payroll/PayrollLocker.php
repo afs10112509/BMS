@@ -38,12 +38,15 @@ class PayrollLocker
                 }
 
                 $auto = $autoByEmployee[$employee->id] ?? $this->calculator->emptyAuto($employee);
+                $gapok = $existing !== null
+                    ? (float) $existing->gapok
+                    : (float) $auto['gapok'];
                 $insentifAcc = (float) ($existing?->insentif_acc ?? 0);
                 $bonusAbsen = (float) ($existing?->bonus_absen ?? 0);
                 $hutang = (float) ($existing?->hutang ?? 0);
                 $pengeluaran = (float) ($existing?->pengeluaran ?? 0);
                 $total = Payroll::computeTotal(
-                    $auto['gapok'],
+                    $gapok,
                     $auto['insentif_hp'],
                     $auto['service_incentive'],
                     $insentifAcc,
@@ -65,7 +68,7 @@ class PayrollLocker
                         'is_promotor' => $auto['is_promotor'],
                         'is_technician' => $auto['is_technician'],
                         'present_days' => $auto['present_days'],
-                        'gapok' => $auto['gapok'],
+                        'gapok' => $gapok,
                         'closing_qty' => $auto['closing_qty'],
                         'insentif_hp' => $auto['insentif_hp'],
                         'service_profit' => $auto['service_profit'],
@@ -104,12 +107,15 @@ class PayrollLocker
                 $employee = $employees->get($employeeId);
                 $auto = $autoByEmployee[$employeeId] ?? $this->calculator->emptyAuto($employee);
 
+                $gapok = array_key_exists('gapok', $item)
+                    ? (float) $item['gapok']
+                    : (float) $auto['gapok'];
                 $insentifAcc = (float) ($item['insentif_acc'] ?? 0);
                 $bonusAbsen = (float) ($item['bonus_absen'] ?? 0);
                 $hutang = (float) ($item['hutang'] ?? 0);
                 $pengeluaran = (float) ($item['pengeluaran'] ?? 0);
                 $total = Payroll::computeTotal(
-                    $auto['gapok'],
+                    $gapok,
                     $auto['insentif_hp'],
                     $auto['service_incentive'],
                     $insentifAcc,
@@ -131,7 +137,7 @@ class PayrollLocker
                         'is_promotor' => $auto['is_promotor'],
                         'is_technician' => $auto['is_technician'],
                         'present_days' => $auto['present_days'],
-                        'gapok' => $auto['gapok'],
+                        'gapok' => $gapok,
                         'closing_qty' => $auto['closing_qty'],
                         'insentif_hp' => $auto['insentif_hp'],
                         'service_profit' => $auto['service_profit'],
