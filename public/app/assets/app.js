@@ -2445,6 +2445,14 @@ createApp({
       return qs ? `?${qs}` : '';
     }
 
+    function isTechnicianEmployee(emp) {
+      if (!emp) return false;
+      const positions = Array.isArray(emp.positions) ? emp.positions : [];
+      if (positions.map((p) => String(p).toLowerCase()).includes('teknisi')) return true;
+      const label = String(emp.position || '').toLowerCase();
+      return label.split(',').some((part) => part.trim().includes('teknisi'));
+    }
+
     async function loadServiceTechnicians() {
       if (!canInputService.value && !isOwner.value) {
         serviceTechnicians.value = [];
@@ -2458,7 +2466,9 @@ createApp({
           params.set('branch_id', String(serviceFilter.branch_id));
         }
         const data = await api(`/employees?${params.toString()}`);
-        serviceTechnicians.value = (data.data || []).filter((e) => e.status === 'active' || isOwner.value);
+        serviceTechnicians.value = (data.data || []).filter((e) => (
+          (e.status === 'active' || isOwner.value) && isTechnicianEmployee(e)
+        ));
       } catch (_) {
         serviceTechnicians.value = [];
       }
