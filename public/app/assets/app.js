@@ -2032,6 +2032,61 @@ createApp({
       return Number.isFinite(n) && n !== 0;
     }
 
+    /** Normalisasi HP Indonesia → digit internasional (62…) untuk wa.me */
+    function toWhatsAppPhone(raw) {
+      let digits = String(raw || '').replace(/\D+/g, '');
+      if (!digits) return '';
+      if (digits.startsWith('62')) return digits;
+      if (digits.startsWith('0')) return `62${digits.slice(1)}`;
+      if (digits.startsWith('8')) return `62${digits}`;
+      return digits;
+    }
+
+    function buildPayrollWhatsAppText(row) {
+      if (!row) return '';
+      const lines = [
+        '*Slip Gaji — BMS*',
+        `Nama: ${row.name || '—'}`,
+        `Cabang: ${row.branch_name || '—'}`,
+        `Periode: ${payrollMonthLabel.value}`,
+        '',
+      ];
+      const pushIf = (label, value, fmt = (v) => String(v)) => {
+        if (!payrollDetailHas(value)) return;
+        lines.push(`${label}: ${fmt(value)}`);
+      };
+      pushIf('Hadir', row.present_days, (v) => `${v} hari`);
+      pushIf('Gapok', row.gapok, formatRp);
+      pushIf('Qty Closing', row.closing_qty);
+      pushIf('Insentif HP', row.insentif_hp, formatRp);
+      pushIf('Service 50%', row.service_incentive, formatRp);
+      pushIf('Insentif ACC', row.insentif_acc, formatRp);
+      pushIf('Bonus', row.bonus_absen, formatRp);
+      pushIf('Hutang', row.hutang, formatRp);
+      pushIf('Pengeluaran', row.pengeluaran, formatRp);
+      lines.push('');
+      lines.push(`*Total bersih: ${formatRp(row.total)}*`);
+      if (row.note) {
+        lines.push('');
+        lines.push(`Catatan: ${row.note}`);
+      }
+      return lines.join('\n');
+    }
+
+    function openPayrollWhatsApp(row) {
+      const phone = toWhatsAppPhone(row?.phone);
+      if (!phone) {
+        toast('Nomor HP karyawan belum diisi. Lengkapi di Data Karyawan.', 'error');
+        return;
+      }
+      const text = buildPayrollWhatsAppText(row);
+      const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+      const win = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!win) {
+        toast('Popup diblokir browser. Izinkan popup untuk membuka WhatsApp.', 'error');
+      }
+    }
+
     function wwBranchParams(extra = {}) {
       const params = new URLSearchParams(extra);
       if (isOwner.value) {
@@ -3783,6 +3838,7 @@ createApp({
       openPayrollDetail,
       closePayrollDetail,
       payrollDetailHas,
+      openPayrollWhatsApp,
       onPayrollManualInput,
       onPayrollFocus,
       onPayrollKeydown,
@@ -5864,8 +5920,15 @@ createApp({
                           {{ row.status==='locked' ? 'Terkunci' : 'Draf' }}
                         </span>
                       </td>
-                      <td>
+                      <td class="payroll-row-actions">
                         <button class="btn btn-ghost btn-sm" type="button" @click="openPayrollDetail(row)">Detail</button>
+                        <button
+                          class="btn btn-ghost btn-sm"
+                          type="button"
+                          title="Buka WhatsApp ke nomor karyawan"
+                          :disabled="!row.phone"
+                          @click="openPayrollWhatsApp(row)"
+                        >WA</button>
                       </td>
                     </tr>
                     <tr class="closing-subtotal-row">
@@ -7182,6 +7245,14 @@ createApp({
         </template>
         <div class="modal-actions">
           <button class="btn btn-ghost" type="button" @click="closePayrollDetail">Tutup</button>
+          <button
+            v-if="payrollDetail.data"
+            class="btn btn-primary"
+            type="button"
+            :disabled="!payrollDetail.data.phone"
+            title="Buka WhatsApp ke nomor karyawan"
+            @click="openPayrollWhatsApp(payrollDetail.data)"
+          >Kirim WhatsApp</button>
         </div>
       </div>
     </div>

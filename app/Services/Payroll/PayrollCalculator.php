@@ -116,6 +116,7 @@ class PayrollCalculator
             'payroll_id' => $payroll->id,
             'employee_id' => $employee->id,
             'name' => $employee->name,
+            'phone' => $employee->phone,
             'branch_id' => $payroll->branch_id,
             'branch_name' => $employee->branch?->name,
             'position' => $payroll->position_snapshot ?? $employee->position,
