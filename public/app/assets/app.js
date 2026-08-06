@@ -3417,7 +3417,6 @@ createApp({
           }
         }
         if (page.value === 'employees') await loadEmployees();
-        if (page.value === 'services') await loadServiceRecords();
         if (page.value === 'transactions' && txForm.branch_id) {
           await loadTxBranchLock(txForm.branch_id);
         }
@@ -3425,6 +3424,8 @@ createApp({
           await loadTxBranchLock(internalTransferForm.branch_id);
         }
       }
+      // Admin & Owner: daftar servis + opsi teknisi (sebelumnya hanya Owner → dropdown admin kosong)
+      if (page.value === 'services') await loadServiceRecords();
       if (page.value === 'closings') await loadClosingBoard();
       if (page.value === 'attendance') {
         if (attendanceTab.value === 'daily') await loadAttendanceDaily();
