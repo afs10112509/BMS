@@ -1900,6 +1900,7 @@ createApp({
           month: Number(payrollFilter.month),
           items: rows.map((r) => ({
             employee_id: r.employee_id,
+            gapok: Number(r.gapok || 0),
             insentif_acc: Number(r.insentif_acc || 0),
             bonus_absen: Number(r.bonus_absen || 0),
             hutang: Number(r.hutang || 0),
@@ -5862,7 +5863,19 @@ createApp({
                       <td v-if="isOwner && !payrollFilter.branch_id" class="col-sticky-2">{{ row.branch_name }}</td>
                       <td>{{ row.position || '—' }}</td>
                       <td>{{ row.present_days }}</td>
-                      <td>{{ formatRp(row.gapok) }}</td>
+                      <td>
+                        <input
+                          class="payroll-cell"
+                          type="text"
+                          inputmode="numeric"
+                          title="Dihitung otomatis (hadir × Rp50.000; promotor 0). Bisa diubah manual."
+                          :disabled="row.status==='locked' || loading"
+                          :value="formatInputNumber(row.gapok)"
+                          @focus="onPayrollFocus"
+                          @keydown="onPayrollKeydown"
+                          @input="onPayrollManualInput(row, 'gapok', $event)"
+                        />
+                      </td>
                       <td>{{ row.closing_qty }}</td>
                       <td>{{ formatRp(row.insentif_hp) }}</td>
                       <td>{{ formatRp(row.service_incentive) }}</td>
@@ -5958,7 +5971,7 @@ createApp({
               </table>
             </div>
             <p class="closing-hint">
-              Gapok = Hadir × Rp50.000 (promotor = 0). HP = closing × Rp10.000.
+              Gapok = Hadir × Rp50.000 (promotor = 0), bisa diubah manual lalu Simpan. HP = closing × Rp10.000.
               Svc = 50% profit service (teknisi). ACC/Bonus/Hutang/Keluar diisi manual.
             </p>
           </div>
