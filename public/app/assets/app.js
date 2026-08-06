@@ -267,12 +267,21 @@ createApp({
     const employees = ref([]);
     const kelolaTab = ref('branches');
 
+    const employeePositionOptions = [
+      { value: 'owner', label: 'Owner' },
+      { value: 'pic', label: 'PIC' },
+      { value: 'kasir', label: 'Kasir' },
+      { value: 'promotor', label: 'Promotor' },
+      { value: 'fronliner', label: 'Fronliner' },
+      { value: 'teknisi', label: 'Teknisi' },
+    ];
+
     const employeeForm = reactive({
       id: null,
       branch_id: '',
       name: '',
       phone: '',
-      position: '',
+      positions: [],
       status: 'active',
       joined_at: '',
       notes: '',
@@ -1530,11 +1539,6 @@ createApp({
 
     async function loadAttendanceDaily() {
       if (!canAccessAttendance.value) return;
-      if (isOwner.value && !attendanceFilter.branch_id) {
-        attendanceDailyRows.value = [];
-        attendanceDailyMeta.value = null;
-        return;
-      }
       const params = new URLSearchParams();
       params.set('date', attendanceDailyDate.value);
       if (isOwner.value && attendanceFilter.branch_id) {
@@ -1585,10 +1589,6 @@ createApp({
 
     async function copyYesterdayAttendance() {
       if (!attendanceDailyRows.value.length) return;
-      if (isOwner.value && !attendanceFilter.branch_id) {
-        toast('Pilih cabang terlebih dahulu.', 'error');
-        return;
-      }
       const d = new Date(`${attendanceDailyDate.value}T12:00:00`);
       d.setDate(d.getDate() - 1);
       const yest = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -1621,10 +1621,6 @@ createApp({
     async function saveAttendanceDaily() {
       if (!attendanceDailyRows.value.length) {
         toast('Tidak ada karyawan untuk diabsen.', 'error');
-        return;
-      }
-      if (isOwner.value && !attendanceFilter.branch_id) {
-        toast('Pilih cabang terlebih dahulu.', 'error');
         return;
       }
       const incomplete = attendanceDailyRows.value.filter((r) => !r.status);
@@ -2336,10 +2332,30 @@ createApp({
       employeeForm.branch_id = '';
       employeeForm.name = '';
       employeeForm.phone = '';
-      employeeForm.position = '';
+      employeeForm.positions = [];
       employeeForm.status = 'active';
       employeeForm.joined_at = '';
       employeeForm.notes = '';
+    }
+
+    function toggleEmployeePosition(code) {
+      const idx = employeeForm.positions.indexOf(code);
+      if (idx >= 0) {
+        employeeForm.positions.splice(idx, 1);
+      } else {
+        employeeForm.positions.push(code);
+      }
+    }
+
+    function formatEmployeePositions(emp) {
+      if (!emp) return '—';
+      if (emp.position) return emp.position;
+      const codes = Array.isArray(emp.positions) ? emp.positions : [];
+      if (!codes.length) return '—';
+      const labels = employeePositionOptions
+        .filter((o) => codes.includes(o.value))
+        .map((o) => o.label);
+      return labels.length ? labels.join(', ') : '—';
     }
 
     function scrollMainTop(selector) {
@@ -2365,7 +2381,7 @@ createApp({
       employeeForm.branch_id = branchId != null && branchId !== '' ? Number(branchId) : '';
       employeeForm.name = emp.name || '';
       employeeForm.phone = emp.phone || '';
-      employeeForm.position = emp.position || '';
+      employeeForm.positions = Array.isArray(emp.positions) ? [...emp.positions] : [];
       employeeForm.status = emp.status || 'active';
       employeeForm.joined_at = emp.joined_at ? String(emp.joined_at).slice(0, 10) : '';
       employeeForm.notes = emp.notes || '';
@@ -2384,7 +2400,7 @@ createApp({
           branch_id: Number(employeeForm.branch_id),
           name: employeeForm.name.trim(),
           phone: employeeForm.phone.trim(),
-          position: employeeForm.position.trim() || null,
+          positions: [...employeeForm.positions],
           status: employeeForm.status,
           joined_at: employeeForm.joined_at || null,
           notes: employeeForm.notes.trim() || null,
@@ -2435,11 +2451,13 @@ createApp({
         return;
       }
       try {
-        let path = '/employees';
+        const params = new URLSearchParams();
+        params.set('has_position', 'teknisi');
+        params.set('status', 'active');
         if (isOwner.value && serviceFilter.branch_id) {
-          path += `?branch_id=${serviceFilter.branch_id}&status=active`;
+          params.set('branch_id', String(serviceFilter.branch_id));
         }
-        const data = await api(path);
+        const data = await api(`/employees?${params.toString()}`);
         serviceTechnicians.value = (data.data || []).filter((e) => e.status === 'active' || isOwner.value);
       } catch (_) {
         serviceTechnicians.value = [];
@@ -3385,8 +3403,11 @@ createApp({
       admins,
       employees,
       kelolaTab,
+      employeePositionOptions,
       employeeForm,
       employeeFilter,
+      toggleEmployeePosition,
+      formatEmployeePositions,
       employeesByBranch,
       serviceRecords,
       serviceSummary,
@@ -4997,9 +5018,18 @@ createApp({
                   <label>Telepon <span class="opt">(wajib)</span></label>
                   <input v-model="employeeForm.phone" placeholder="08xxxxxxxxxx" />
                 </div>
-                <div class="field">
-                  <label>Jabatan</label>
-                  <input v-model="employeeForm.position" placeholder="Contoh: Sales" />
+                <div class="field" style="grid-column: 1 / -1">
+                  <label>Jabatan <span class="opt">(boleh lebih dari satu)</span></label>
+                  <div class="position-pills">
+                    <button
+                      v-for="opt in employeePositionOptions"
+                      :key="opt.value"
+                      type="button"
+                      class="position-pill"
+                      :class="{ active: employeeForm.positions.includes(opt.value) }"
+                      @click="toggleEmployeePosition(opt.value)"
+                    >{{ opt.label }}</button>
+                  </div>
                 </div>
               </div>
               <div class="tx-form-main">
@@ -5077,7 +5107,7 @@ createApp({
                     <td class="col-no">{{ rowNo(idx) }}</td>
                     <td><strong>{{ e.name }}</strong></td>
                     <td>{{ e.branch?.name || '—' }}</td>
-                    <td>{{ e.position || '—' }}</td>
+                    <td>{{ formatEmployeePositions(e) }}</td>
                     <td>{{ e.phone || '—' }}</td>
                     <td>
                       <span class="badge" :class="e.status==='active' ? 'badge-approved' : 'badge-rejected'">
@@ -5259,7 +5289,7 @@ createApp({
               <div v-if="isOwner" class="field">
                 <label>Cabang</label>
                 <select v-model="attendanceFilter.branch_id" @change="onAttendanceFilterChange">
-                  <option value="">Pilih cabang</option>
+                  <option value="">Semua cabang</option>
                   <option v-for="b in branches" :key="b.id" :value="b.id">{{ b.name }}</option>
                 </select>
               </div>
@@ -5273,59 +5303,55 @@ createApp({
               </div>
             </div>
 
-            <div v-if="isOwner && !attendanceFilter.branch_id" class="empty-hint">
-              Pilih cabang untuk mengisi absensi harian.
+            <div class="filter-meta">
+              Ringkas:
+              <strong class="att-present">H {{ attendanceDailyCounts.present }}</strong>
+              · <strong class="att-leave">I {{ attendanceDailyCounts.leave }}</strong>
+              · <strong class="att-sick">S {{ attendanceDailyCounts.sick }}</strong>
+              · <strong class="att-absent">A {{ attendanceDailyCounts.absent }}</strong>
+              <span v-if="attendanceDailyCounts.empty"> · belum isi {{ attendanceDailyCounts.empty }}</span>
             </div>
 
-            <template v-else>
-              <div class="filter-meta">
-                Ringkas:
-                <strong class="att-present">H {{ attendanceDailyCounts.present }}</strong>
-                · <strong class="att-leave">I {{ attendanceDailyCounts.leave }}</strong>
-                · <strong class="att-sick">S {{ attendanceDailyCounts.sick }}</strong>
-                · <strong class="att-absent">A {{ attendanceDailyCounts.absent }}</strong>
-                <span v-if="attendanceDailyCounts.empty"> · belum isi {{ attendanceDailyCounts.empty }}</span>
-              </div>
+            <div class="att-actions">
+              <button class="btn btn-ghost btn-sm" type="button" :disabled="loading || !attendanceDailyRows.length" @click="markAllAttendancePresent">Tandai semua Hadir</button>
+              <button class="btn btn-ghost btn-sm" type="button" :disabled="loading || !attendanceDailyRows.length" @click="copyYesterdayAttendance">Salin kemarin</button>
+              <button class="btn btn-primary" type="button" :disabled="loading || !attendanceDailyRows.length" @click="saveAttendanceDaily">Simpan Absensi</button>
+            </div>
 
-              <div class="att-actions">
-                <button class="btn btn-ghost btn-sm" type="button" :disabled="loading || !attendanceDailyRows.length" @click="markAllAttendancePresent">Tandai semua Hadir</button>
-                <button class="btn btn-ghost btn-sm" type="button" :disabled="loading || !attendanceDailyRows.length" @click="copyYesterdayAttendance">Salin kemarin</button>
-                <button class="btn btn-primary" type="button" :disabled="loading || !attendanceDailyRows.length" @click="saveAttendanceDaily">Simpan Absensi</button>
-              </div>
-
-              <div class="table-wrap">
-                <table class="att-daily-table">
-                  <thead>
-                    <tr>
-                      <th class="col-no">No</th>
-                      <th>Nama</th>
-                      <th>Status</th>
-                      <th>Catatan</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="(row, idx) in attendanceDailyRows" :key="row.employee_id">
-                      <td class="col-no">{{ rowNo(idx) }}</td>
-                      <td><strong>{{ row.name }}</strong></td>
-                      <td>
-                        <div class="att-radio-row">
-                          <label v-for="opt in attendanceStatusOptions" :key="opt.value" class="att-radio" :class="{active: row.status===opt.value, ['att-'+opt.value]: true}">
-                            <input type="radio" :name="'att-'+row.employee_id" :value="opt.value" v-model="row.status" />
-                            <span>{{ opt.label }}</span>
-                          </label>
-                        </div>
-                      </td>
-                      <td>
-                        <input class="att-note" type="text" v-model="row.note" maxlength="255" placeholder="Opsional" />
-                      </td>
-                    </tr>
-                    <tr v-if="!attendanceDailyRows.length">
-                      <td colspan="4">Tidak ada karyawan aktif di cabang ini (jabatan owner disembunyikan).</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </template>
+            <div class="table-wrap">
+              <table class="att-daily-table">
+                <thead>
+                  <tr>
+                    <th class="col-no">No</th>
+                    <th>Nama</th>
+                    <th v-if="isOwner && !attendanceFilter.branch_id">Cabang</th>
+                    <th>Status</th>
+                    <th>Catatan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(row, idx) in attendanceDailyRows" :key="row.employee_id">
+                    <td class="col-no">{{ rowNo(idx) }}</td>
+                    <td><strong>{{ row.name }}</strong></td>
+                    <td v-if="isOwner && !attendanceFilter.branch_id">{{ row.branch_name || '—' }}</td>
+                    <td>
+                      <div class="att-radio-row">
+                        <label v-for="opt in attendanceStatusOptions" :key="opt.value" class="att-radio" :class="{active: row.status===opt.value, ['att-'+opt.value]: true}">
+                          <input type="radio" :name="'att-'+row.employee_id" :value="opt.value" v-model="row.status" />
+                          <span>{{ opt.label }}</span>
+                        </label>
+                      </div>
+                    </td>
+                    <td>
+                      <input class="att-note" type="text" v-model="row.note" maxlength="255" placeholder="Opsional" />
+                    </td>
+                  </tr>
+                  <tr v-if="!attendanceDailyRows.length">
+                    <td :colspan="isOwner && !attendanceFilter.branch_id ? 5 : 4">Tidak ada karyawan aktif (Owner/PIC disembunyikan).</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <div v-else class="card" style="margin-top:14px">
@@ -5587,7 +5613,7 @@ createApp({
             </div>
             <p class="closing-hint">
               Gapok = Hadir × Rp50.000 (promotor = 0). Insentif HP = closing × Rp10.000.
-              Service 50% hanya jabatan teknisi/service. Kolom Acc/Bonus/Hutang/Pengeluaran diisi manual.
+              Service 50% hanya jabatan Teknisi. Kolom Acc/Bonus/Hutang/Pengeluaran diisi manual.
             </p>
           </div>
         </section>

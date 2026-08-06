@@ -418,10 +418,7 @@ class PayrollController extends Controller
         $query = Employee::query()
             ->with('branch:id,name,type')
             ->where('status', 'active')
-            ->where(function ($q) {
-                $q->whereNull('position')
-                    ->orWhereRaw('LOWER(TRIM(position)) NOT IN (?, ?)', ['owner', 'pemilik']);
-            })
+            ->withoutManagement()
             ->orderBy('name');
 
         if ($branchId) {
