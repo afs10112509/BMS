@@ -96,6 +96,14 @@ createApp({
     const demoPasswordHint = ref('password');
     const loginError = ref('');
 
+    const profileForm = reactive({
+      name: '',
+      email: '',
+      current_password: '',
+      password: '',
+      password_confirmation: '',
+    });
+
     const categories = ref([]);
     const accountForm = reactive({
       id: null,
@@ -832,6 +840,56 @@ createApp({
       } catch (_) {}
       logout();
       await loadDemoAccounts();
+    }
+
+    function fillProfileForm() {
+      profileForm.name = user.value?.name || '';
+      profileForm.email = user.value?.email || '';
+      profileForm.current_password = '';
+      profileForm.password = '';
+      profileForm.password_confirmation = '';
+    }
+
+    async function submitProfile() {
+      if (!profileForm.name.trim() || !profileForm.email.trim()) {
+        toast('Nama dan email wajib diisi.', 'error');
+        return;
+      }
+      if (!profileForm.current_password) {
+        toast('Kata sandi saat ini wajib diisi untuk menyimpan perubahan.', 'error');
+        return;
+      }
+      if (profileForm.password && profileForm.password !== profileForm.password_confirmation) {
+        toast('Konfirmasi kata sandi baru tidak cocok.', 'error');
+        return;
+      }
+      if (profileForm.password && profileForm.password.length < 6) {
+        toast('Kata sandi baru minimal 6 karakter.', 'error');
+        return;
+      }
+      loading.value = true;
+      try {
+        const payload = {
+          name: profileForm.name.trim(),
+          email: profileForm.email.trim(),
+          current_password: profileForm.current_password,
+        };
+        if (profileForm.password) {
+          payload.password = profileForm.password;
+          payload.password_confirmation = profileForm.password_confirmation;
+        }
+        const data = await api('/auth/profile', {
+          method: 'PUT',
+          body: JSON.stringify(payload),
+        });
+        user.value = data.data;
+        localStorage.setItem(USER_KEY, JSON.stringify(data.data));
+        fillProfileForm();
+        toast(data.message || 'Profil berhasil diperbarui.', 'success');
+      } catch (_) {
+      } finally {
+        loading.value = false;
+      }
     }
 
     async function loadDemoAccounts() {
@@ -3366,6 +3424,7 @@ createApp({
     async function go(next) {
       page.value = next;
       syncNavGroups(next);
+      if (next === 'profile') fillProfileForm();
       await refreshCurrent();
       if (isOwner.value && next === 'dashboard') {
         await nextTick();
@@ -3553,6 +3612,9 @@ createApp({
       rowNo,
       doLogin,
       doLogout,
+      profileForm,
+      fillProfileForm,
+      submitProfile,
       go,
       submitTransaction,
       applyTxFilters,
@@ -3926,10 +3988,48 @@ createApp({
               <span class="role-chip">{{ roleLabel }}</span>
             </div>
           </div>
-          <button class="btn btn-ghost btn-sm" @click="doLogout">Keluar</button>
+          <div class="topbar-actions">
+            <button class="btn btn-ghost btn-sm" type="button" :class="{active: page==='profile'}" @click="go('profile')">Akun</button>
+            <button class="btn btn-ghost btn-sm" type="button" @click="doLogout">Keluar</button>
+          </div>
         </header>
 
         <div class="main-scroll">
+        <section v-if="page==='profile'" class="card" style="max-width:560px">
+          <div class="page-head" style="margin-bottom:12px;padding:0">
+            <div>
+              <h2 class="brand">Akun Saya</h2>
+              <p>Ubah nama, email, atau kata sandi. Wajib isi kata sandi saat ini.</p>
+            </div>
+          </div>
+          <div class="form-grid">
+            <div class="field">
+              <label>Nama</label>
+              <input v-model="profileForm.name" autocomplete="name" />
+            </div>
+            <div class="field">
+              <label>Email</label>
+              <input v-model="profileForm.email" type="email" autocomplete="username" />
+            </div>
+            <div class="field">
+              <label>Kata sandi saat ini <span class="opt">(wajib)</span></label>
+              <input v-model="profileForm.current_password" type="password" autocomplete="current-password" />
+            </div>
+            <div class="field">
+              <label>Kata sandi baru <span class="opt">(opsional)</span></label>
+              <input v-model="profileForm.password" type="password" autocomplete="new-password" placeholder="Minimal 6 karakter" />
+            </div>
+            <div class="field">
+              <label>Konfirmasi kata sandi baru</label>
+              <input v-model="profileForm.password_confirmation" type="password" autocomplete="new-password" />
+            </div>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-primary" type="button" :disabled="loading" @click="submitProfile">Simpan Perubahan</button>
+              <button class="btn btn-ghost" type="button" @click="fillProfileForm">Reset</button>
+            </div>
+          </div>
+        </section>
+
         <div v-if="bootLoading || (page === 'dashboard' && dashLoading)" class="grid-4" style="margin-bottom:14px">
           <div class="skeleton sk-card"></div>
           <div class="skeleton sk-card"></div>
