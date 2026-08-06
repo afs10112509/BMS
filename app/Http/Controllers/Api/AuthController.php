@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -67,6 +68,45 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'Kata sandi terverifikasi.',
             'confirmed' => true,
+        ]);
+    }
+
+    public function updateProfile(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => [
+                'required',
+                'email',
+                'max:255',
+                Rule::unique('users', 'email')->ignore($user->id),
+            ],
+            'current_password' => ['required', 'string'],
+            'password' => ['nullable', 'string', 'min:6', 'confirmed'],
+        ]);
+
+        if (! Hash::check($data['current_password'], $user->password)) {
+            throw ValidationException::withMessages([
+                'current_password' => ['Kata sandi saat ini tidak sesuai.'],
+            ]);
+        }
+
+        $user->name = $data['name'];
+        $user->email = $data['email'];
+
+        if (! empty($data['password'])) {
+            $user->password = $data['password'];
+        }
+
+        $user->save();
+
+        return response()->json([
+            'message' => empty($data['password'])
+                ? 'Profil berhasil diperbarui.'
+                : 'Profil dan kata sandi berhasil diperbarui.',
+            'data' => $user->fresh()->load('branch.branchType'),
         ]);
     }
 

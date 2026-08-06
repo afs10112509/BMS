@@ -34,6 +34,7 @@ Route::get('/', function () {
                 'POST /api/auth/logout',
                 'GET /api/auth/me',
                 'POST /api/auth/confirm-password',
+                'PUT /api/auth/profile',
             ],
             'cabang' => ['GET /api/branches', 'POST /api/branches', 'PUT /api/branches/{id}'],
             'admin' => ['GET /api/admins', 'POST /api/admins', 'PUT /api/admins/{id}', 'DELETE /api/admins/{id}'],
@@ -77,6 +78,7 @@ Route::prefix('auth')->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/me', [AuthController::class, 'me']);
         Route::post('/confirm-password', [AuthController::class, 'confirmPassword']);
+        Route::put('/profile', [AuthController::class, 'updateProfile']);
     });
 });
 

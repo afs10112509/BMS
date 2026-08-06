@@ -192,6 +192,8 @@ return [
         'position' => 'jabatan',
         'positions' => 'jabatan',
         'positions.*' => 'jabatan',
+        'current_password' => 'kata sandi saat ini',
+        'password_confirmation' => 'konfirmasi kata sandi',
         'joined_at' => 'tanggal bergabung',
         'notes' => 'catatan',
         'note' => 'catatan',
