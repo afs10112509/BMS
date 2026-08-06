@@ -17,6 +17,57 @@ class ServiceRecordController extends Controller
         protected PayrollLockChecker $payrollLockChecker,
     ) {}
 
+    public function technicians(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if ($user->isAdmin()) {
+            if ($this->isWorkshopBranch($user->branch_id)) {
+                return response()->json([
+                    'message' => 'Tipe cabang ini tidak menggunakan modul Service.',
+                    'data' => [],
+                ], 403);
+            }
+            $branchId = (int) $user->branch_id;
+        } elseif ($user->isOwner()) {
+            $branchId = $request->filled('branch_id') ? $request->integer('branch_id') : null;
+        } else {
+            return response()->json(['message' => 'Akses ditolak.'], 403);
+        }
+
+        $query = Employee::query()
+            ->where('employees.status', 'active')
+            ->where(function ($q) {
+                $q->withPosition(Employee::POS_TEKNISI)
+                    ->orWhere('employees.position', 'ilike', '%teknisi%');
+            })
+            ->orderBy('employees.name')
+            ->select([
+                'employees.id',
+                'employees.branch_id',
+                'employees.name',
+                'employees.phone',
+                'employees.position',
+                'employees.positions',
+                'employees.status',
+            ]);
+
+        if ($branchId) {
+            $query->where('employees.branch_id', $branchId);
+        }
+
+        $rows = $query->get();
+
+        return response()->json([
+            'message' => 'Daftar teknisi berhasil diambil.',
+            'data' => $rows,
+            'meta' => [
+                'branch_id' => $branchId,
+                'count' => $rows->count(),
+            ],
+        ]);
+    }
+
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();

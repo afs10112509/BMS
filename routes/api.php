@@ -150,6 +150,7 @@ Route::middleware(['auth:sanctum', 'admin.branch'])->group(function () {
         Route::put('/closings/targets', [ClosingBoardController::class, 'upsertTarget']);
         Route::put('/closings/daily', [ClosingBoardController::class, 'upsertDaily']);
 
+        Route::get('/service-records/technicians', [ServiceRecordController::class, 'technicians']);
         Route::get('/service-records', [ServiceRecordController::class, 'index']);
         Route::post('/service-records', [ServiceRecordController::class, 'store']);
         Route::put('/service-records/{serviceRecord}', [ServiceRecordController::class, 'update']);

@@ -2580,10 +2580,21 @@ createApp({
       return qs ? `?${qs}` : '';
     }
 
+    function employeePositionsList(emp) {
+      if (!emp) return [];
+      let raw = emp.positions;
+      if (typeof raw === 'string') {
+        try { raw = JSON.parse(raw); } catch (_) { raw = []; }
+      }
+      if (Array.isArray(raw)) {
+        return raw.map((p) => String(p).toLowerCase());
+      }
+      return [];
+    }
+
     function isTechnicianEmployee(emp) {
       if (!emp) return false;
-      const positions = Array.isArray(emp.positions) ? emp.positions : [];
-      if (positions.map((p) => String(p).toLowerCase()).includes('teknisi')) return true;
+      if (employeePositionsList(emp).includes('teknisi')) return true;
       const label = String(emp.position || '').toLowerCase();
       return label.split(',').some((part) => part.trim().includes('teknisi'));
     }
@@ -2595,14 +2606,15 @@ createApp({
       }
       try {
         const params = new URLSearchParams();
-        params.set('has_position', 'teknisi');
-        params.set('status', 'active');
         if (isOwner.value && serviceFilter.branch_id) {
           params.set('branch_id', String(serviceFilter.branch_id));
         }
-        const data = await api(`/employees?${params.toString()}`);
+        const qs = params.toString();
+        const data = await api(`/service-records/technicians${qs ? `?${qs}` : ''}`);
+        // Endpoint sudah filter teknisi + cabang; jangan filter ulang ketat di client
+        // (positions JSON kadang string / label lama "Teknisi").
         serviceTechnicians.value = (data.data || []).filter((e) => (
-          (e.status === 'active' || isOwner.value) && isTechnicianEmployee(e)
+          e.status === 'active' || isOwner.value || isTechnicianEmployee(e)
         ));
       } catch (_) {
         serviceTechnicians.value = [];
@@ -5079,9 +5091,10 @@ createApp({
                 <div class="field">
                   <label>Teknisi</label>
                   <select v-model="serviceForm.employee_id">
-                    <option disabled value="">Pilih teknisi</option>
+                    <option disabled value="">{{ serviceTechnicians.length ? 'Pilih teknisi' : 'Belum ada teknisi di cabang' }}</option>
                     <option v-for="e in serviceTechnicians" :key="e.id" :value="e.id">{{ e.name }}</option>
                   </select>
+                  <small v-if="!serviceTechnicians.length" class="muted">Hanya karyawan aktif berjabatan Teknisi di cabang Anda. Minta Owner set jabatan di Data Karyawan.</small>
                 </div>
                 <div class="field">
                   <label>Merek</label>
