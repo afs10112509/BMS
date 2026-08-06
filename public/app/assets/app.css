@@ -1115,6 +1115,27 @@ tfoot td { background: #F8FAFC; border-top: 2px solid var(--line); font-weight: 
 .att-board .att-leave, .att-leave { color: #D97706; }
 .att-board .att-sick, .att-sick { color: #2563EB; }
 .att-board .att-absent, .att-absent { color: #DC2626; }
+.att-board .att-cell-editable { padding: 2px !important; }
+.att-board-select {
+  width: 100%;
+  min-width: 2.4rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  font-weight: 700;
+  font-size: .78rem;
+  text-align: center;
+  cursor: pointer;
+  padding: 2px 0;
+  color: inherit;
+}
+.att-board-select:hover,
+.att-board-select:focus {
+  border-color: rgba(15, 118, 110, .35);
+  background: #fff;
+  outline: none;
+}
+.att-board-select:disabled { opacity: .6; cursor: wait; }
 
 /* Payroll */
 .payroll-board { min-width: 1100px; }
