@@ -1144,13 +1144,23 @@ tfoot td { background: #F8FAFC; border-top: 2px solid var(--line); font-weight: 
 .att-board-select:disabled { opacity: .6; cursor: wait; }
 
 /* Payroll */
-.payroll-board { min-width: 1100px; }
+.payroll-board { min-width: 980px; }
+.payroll-board th {
+  white-space: nowrap;
+  font-size: .72rem;
+  letter-spacing: .02em;
+}
 .payroll-row-actions {
-  display: flex;
+  display: inline-flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
   gap: 6px;
-  flex-wrap: wrap;
   align-items: center;
   white-space: nowrap;
+}
+.payroll-row-actions .btn-sm {
+  padding: 4px 8px;
+  font-size: .75rem;
 }
 .payroll-cell {
   width: 88px;
