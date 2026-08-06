@@ -5835,18 +5835,18 @@ createApp({
                     <th class="col-sticky">Nama</th>
                     <th v-if="isOwner && !payrollFilter.branch_id" class="col-sticky-2">Cabang</th>
                     <th>Jabatan</th>
-                    <th>Hadir</th>
-                    <th>Gapok</th>
-                    <th>Qty</th>
-                    <th>Insentif HP</th>
-                    <th>Service 50%</th>
-                    <th>Insentif ACC</th>
+                    <th title="Hari hadir">Hadir</th>
+                    <th title="Gaji pokok">Gapok</th>
+                    <th title="Qty closing HP">Qty</th>
+                    <th title="Insentif HP">HP</th>
+                    <th title="Insentif service 50%">Svc</th>
+                    <th title="Insentif ACC">ACC</th>
                     <th>Bonus</th>
                     <th>Hutang</th>
-                    <th>Pengeluaran</th>
+                    <th title="Pengeluaran">Keluar</th>
                     <th>Total</th>
                     <th>Status</th>
-                    <th></th>
+                    <th>Aksi</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -5920,15 +5920,17 @@ createApp({
                           {{ row.status==='locked' ? 'Terkunci' : 'Draf' }}
                         </span>
                       </td>
-                      <td class="payroll-row-actions">
-                        <button class="btn btn-ghost btn-sm" type="button" @click="openPayrollDetail(row)">Detail</button>
-                        <button
-                          class="btn btn-ghost btn-sm"
-                          type="button"
-                          title="Buka WhatsApp ke nomor karyawan"
-                          :disabled="!row.phone"
-                          @click="openPayrollWhatsApp(row)"
-                        >WA</button>
+                      <td>
+                        <div class="payroll-row-actions">
+                          <button class="btn btn-ghost btn-sm" type="button" @click="openPayrollDetail(row)">Detail</button>
+                          <button
+                            class="btn btn-ghost btn-sm"
+                            type="button"
+                            title="Buka WhatsApp ke nomor karyawan"
+                            :disabled="!row.phone"
+                            @click="openPayrollWhatsApp(row)"
+                          >WA</button>
+                        </div>
                       </td>
                     </tr>
                     <tr class="closing-subtotal-row">
@@ -5956,8 +5958,8 @@ createApp({
               </table>
             </div>
             <p class="closing-hint">
-              Gapok = Hadir × Rp50.000 (promotor = 0). Insentif HP = closing × Rp10.000.
-              Service 50% hanya jabatan Teknisi. Kolom Acc/Bonus/Hutang/Pengeluaran diisi manual.
+              Gapok = Hadir × Rp50.000 (promotor = 0). HP = closing × Rp10.000.
+              Svc = 50% profit service (teknisi). ACC/Bonus/Hutang/Keluar diisi manual.
             </p>
           </div>
         </section>
