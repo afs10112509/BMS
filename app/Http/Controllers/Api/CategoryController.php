@@ -130,17 +130,29 @@ class CategoryController extends Controller
             return response()->json(['message' => 'Akses ditolak.'], 403);
         }
 
-        $data = $request->validate([
+        $rules = [
             'name' => ['sometimes', 'string', 'max:255'],
             'is_active' => ['sometimes', 'boolean'],
-        ]);
+        ];
+
+        // Owner boleh ubah cakupan global ↔ lokal.
+        if ($user->isOwner()) {
+            $rules['branch_id'] = ['sometimes', 'nullable', 'integer', 'exists:branches,id'];
+        }
+
+        $data = $request->validate($rules);
+
+        if ($user->isAdmin()) {
+            unset($data['branch_id']);
+        }
 
         try {
-            $category->update($data);
+            $category->fill($data);
+            $category->save();
         } catch (QueryException $e) {
             if ($this->isUniqueViolation($e)) {
                 return response()->json([
-                    'message' => 'Kategori dengan nama dan tipe ini sudah ada.',
+                    'message' => 'Kategori dengan nama dan tipe ini sudah ada di cakupan tersebut.',
                 ], 422);
             }
 
@@ -150,6 +162,40 @@ class CategoryController extends Controller
         return response()->json([
             'message' => 'Kategori berhasil diperbarui.',
             'data' => $category->fresh()->load('branch:id,name'),
+        ]);
+    }
+
+    public function destroy(Request $request, Category $category): JsonResponse
+    {
+        $user = $request->user();
+
+        if ($category->isSystem()) {
+            return response()->json([
+                'message' => 'Kategori sistem tidak boleh dihapus.',
+            ], 422);
+        }
+
+        if ($user->isAdmin()) {
+            if ($category->branch_id === null
+                || (int) $category->branch_id !== (int) $user->branch_id) {
+                return response()->json([
+                    'message' => 'Anda tidak boleh menghapus kategori global atau cabang lain.',
+                ], 403);
+            }
+        } elseif (! $user->isOwner()) {
+            return response()->json(['message' => 'Akses ditolak.'], 403);
+        }
+
+        if ($category->transactions()->exists()) {
+            return response()->json([
+                'message' => 'Kategori sudah dipakai di transaksi. Nonaktifkan saja, jangan dihapus.',
+            ], 422);
+        }
+
+        $category->delete();
+
+        return response()->json([
+            'message' => 'Kategori berhasil dihapus.',
         ]);
     }
 

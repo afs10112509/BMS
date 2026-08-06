@@ -919,9 +919,18 @@ createApp({
       categories.value = data.data || [];
     }
 
+    const SYSTEM_CATEGORY_NAMES = [
+      'Transfer Antar Akun - Keluar',
+      'Transfer Antar Akun - Masuk',
+      'Transfer Keluar Cabang',
+      'Transfer Masuk Cabang',
+      'Penyesuaian Saldo - Pemasukan',
+      'Penyesuaian Saldo - Pengeluaran',
+    ];
+
     function isSystemCategory(c) {
       const name = (c?.name || '').toString();
-      return name.startsWith('Transfer') || name.startsWith('Penyesuaian');
+      return SYSTEM_CATEGORY_NAMES.includes(name);
     }
 
     function categoryScopeLabel(c) {
@@ -3290,11 +3299,16 @@ createApp({
       loading.value = true;
       try {
         if (categoryForm.id) {
+          const payload = {
+            name: categoryForm.name.trim(),
+            is_active: !!categoryForm.is_active,
+          };
+          if (isOwner.value) {
+            payload.branch_id = categoryForm.branch_id ? Number(categoryForm.branch_id) : null;
+          }
           await api(`/categories/${categoryForm.id}`, {
             method: 'PUT',
-            body: JSON.stringify({
-              name: categoryForm.name.trim(),
-            }),
+            body: JSON.stringify(payload),
           });
           toast('Kategori berhasil diperbarui.', 'success');
         } else {
@@ -3330,6 +3344,21 @@ createApp({
           }),
         });
         toast(c.is_active !== false ? 'Kategori dinonaktifkan.' : 'Kategori diaktifkan kembali.', 'success');
+        await refreshCurrent();
+      } catch (_) {
+      } finally {
+        loading.value = false;
+      }
+    }
+
+    async function deleteCategory(c) {
+      if (!canManageCategory(c)) return;
+      if (!confirm(`Hapus kategori "${c.name}"? Hanya bisa jika belum dipakai di transaksi.`)) return;
+      loading.value = true;
+      try {
+        await api(`/categories/${c.id}`, { method: 'DELETE' });
+        toast('Kategori berhasil dihapus.', 'success');
+        if (categoryForm.id === c.id) resetCategoryForm();
         await refreshCurrent();
       } catch (_) {
       } finally {
@@ -3762,6 +3791,7 @@ createApp({
       resetCategoryForm,
       editCategory,
       toggleCategoryActive,
+      deleteCategory,
       canManageCategory,
       isSystemCategory,
       categoryScopeLabel,
@@ -6377,6 +6407,10 @@ createApp({
           <div v-if="kelolaTab==='categories'" class="grid-2" style="margin-top:14px">
             <div class="card">
               <div class="panel-title">{{ categoryForm.id ? 'Ubah Kategori' : 'Tambah Kategori' }}</div>
+              <p class="muted" style="margin:0 0 10px;font-size:.85rem">
+                Owner dapat mengedit, menonaktifkan, dan mengubah cakupan kategori global/lokal
+                (kecuali kategori sistem Transfer/Penyesuaian).
+              </p>
               <div class="form-grid">
                 <div class="field">
                   <label>Nama</label>
@@ -6384,7 +6418,7 @@ createApp({
                 </div>
                 <div class="field">
                   <label>Cakupan</label>
-                  <select v-model="categoryForm.branch_id" :disabled="!!categoryForm.id">
+                  <select v-model="categoryForm.branch_id">
                     <option value="">Global (semua cabang)</option>
                     <option v-for="b in branches" :key="b.id" :value="b.id">Lokal: {{ b.name }}</option>
                   </select>
@@ -6400,6 +6434,13 @@ createApp({
                     :class="{'active-expense': categoryForm.type==='expense', disabled: !!categoryForm.id}"
                     @click="!categoryForm.id && (categoryForm.type='expense')"
                   >Pengeluaran</div>
+                </div>
+                <div v-if="categoryForm.id" class="field">
+                  <label>Status</label>
+                  <select :value="categoryForm.is_active ? '1' : '0'" @change="categoryForm.is_active = ($event.target.value === '1')">
+                    <option value="1">Aktif</option>
+                    <option value="0">Nonaktif</option>
+                  </select>
                 </div>
                 <div style="display:flex;gap:8px">
                   <button class="btn btn-primary" style="flex:1" :disabled="loading" @click="submitCategory">
@@ -6436,12 +6477,15 @@ createApp({
                       </td>
                       <td>
                         <template v-if="canManageCategory(c)">
-                          <button class="btn btn-ghost btn-sm" @click="editCategory(c)">Edit</button>
-                          <button class="btn btn-ghost btn-sm" @click="toggleCategoryActive(c)">
+                          <button class="btn btn-ghost btn-sm" type="button" @click="editCategory(c)">Edit</button>
+                          <button class="btn btn-ghost btn-sm" type="button" @click="toggleCategoryActive(c)">
                             {{ c.is_active !== false ? 'Nonaktifkan' : 'Aktifkan' }}
                           </button>
+                          <button class="btn btn-danger btn-sm" type="button" @click="deleteCategory(c)">Hapus</button>
                         </template>
-                        <span v-else style="color:#94A3B8">—</span>
+                        <span v-else class="muted" style="font-size:.8rem">
+                          {{ isSystemCategory(c) ? 'Sistem' : '—' }}
+                        </span>
                       </td>
                     </tr>
                   </tbody>
@@ -6457,7 +6501,8 @@ createApp({
             <div>
               <h2 class="brand">Kategori</h2>
               <p>
-                Global dipakai semua cabang (hanya lihat). Lokal hanya untuk
+                Kategori global hanya bisa diubah Owner (Kelola → Kategori).
+                Anda mengelola kategori lokal
                 {{ user?.branch?.name || 'cabang Anda' }}.
               </p>
             </div>
@@ -6521,12 +6566,15 @@ createApp({
                       </td>
                       <td>
                         <template v-if="canManageCategory(c)">
-                          <button class="btn btn-ghost btn-sm" @click="editCategory(c)">Edit</button>
-                          <button class="btn btn-ghost btn-sm" @click="toggleCategoryActive(c)">
+                          <button class="btn btn-ghost btn-sm" type="button" @click="editCategory(c)">Edit</button>
+                          <button class="btn btn-ghost btn-sm" type="button" @click="toggleCategoryActive(c)">
                             {{ c.is_active !== false ? 'Nonaktifkan' : 'Aktifkan' }}
                           </button>
+                          <button class="btn btn-danger btn-sm" type="button" @click="deleteCategory(c)">Hapus</button>
                         </template>
-                        <span v-else style="color:#94A3B8">—</span>
+                        <span v-else class="muted" style="font-size:.8rem">
+                          {{ !c.branch_id ? 'Hanya Owner' : (isSystemCategory(c) ? 'Sistem' : '—') }}
+                        </span>
                       </td>
                     </tr>
                   </tbody>

@@ -11,6 +11,20 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable(['branch_id', 'name', 'type', 'is_active'])]
 class Category extends Model
 {
+    /**
+     * Nama kategori sistem (harus sama persis dengan yang dipakai transfer/penyesuaian).
+     *
+     * @var list<string>
+     */
+    public const SYSTEM_NAMES = [
+        'Transfer Antar Akun - Keluar',
+        'Transfer Antar Akun - Masuk',
+        'Transfer Keluar Cabang',
+        'Transfer Masuk Cabang',
+        'Penyesuaian Saldo - Pemasukan',
+        'Penyesuaian Saldo - Pengeluaran',
+    ];
+
     protected function casts(): array
     {
         return [
@@ -45,7 +59,6 @@ class Category extends Model
 
     public function isSystem(): bool
     {
-        return str_starts_with($this->name, 'Transfer')
-            || str_starts_with($this->name, 'Penyesuaian');
+        return in_array($this->name, self::SYSTEM_NAMES, true);
     }
 }
