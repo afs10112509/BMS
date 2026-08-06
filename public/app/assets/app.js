@@ -1537,6 +1537,74 @@ createApp({
       return `att-cell att-${status}`;
     }
 
+    function attendanceBoardDate(day) {
+      const y = Number(attendanceFilter.year);
+      const m = String(Number(attendanceFilter.month)).padStart(2, '0');
+      const d = String(Number(day)).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    function recomputeAttendanceRowCounts(row) {
+      const counts = { present: 0, leave: 0, sick: 0, absent: 0 };
+      const daily = row.daily || {};
+      for (const key of Object.keys(daily)) {
+        const st = daily[key];
+        if (st && counts[st] != null) counts[st] += 1;
+      }
+      row.counts = counts;
+    }
+
+    function recomputeAttendanceBoardTotals() {
+      const groups = attendanceBoard.value.groups || [];
+      for (const g of groups) {
+        g.counts = {
+          present: (g.rows || []).reduce((s, r) => s + Number(r.counts?.present || 0), 0),
+          leave: (g.rows || []).reduce((s, r) => s + Number(r.counts?.leave || 0), 0),
+          sick: (g.rows || []).reduce((s, r) => s + Number(r.counts?.sick || 0), 0),
+          absent: (g.rows || []).reduce((s, r) => s + Number(r.counts?.absent || 0), 0),
+        };
+      }
+      if (attendanceBoard.value.meta) {
+        attendanceBoard.value.meta.counts = {
+          present: groups.reduce((s, g) => s + Number(g.counts?.present || 0), 0),
+          leave: groups.reduce((s, g) => s + Number(g.counts?.leave || 0), 0),
+          sick: groups.reduce((s, g) => s + Number(g.counts?.sick || 0), 0),
+          absent: groups.reduce((s, g) => s + Number(g.counts?.absent || 0), 0),
+        };
+      }
+    }
+
+    async function onAttendanceBoardCellChange(row, day, event) {
+      if (!isOwner.value) return;
+      const next = event?.target?.value || '';
+      const prev = row.daily?.[day] || '';
+      if (String(next) === String(prev || '')) return;
+
+      if (!row.daily) row.daily = {};
+      row.daily[day] = next || null;
+      recomputeAttendanceRowCounts(row);
+      recomputeAttendanceBoardTotals();
+
+      loading.value = true;
+      try {
+        await api('/attendance/cell', {
+          method: 'PUT',
+          body: JSON.stringify({
+            employee_id: Number(row.employee_id),
+            date: attendanceBoardDate(day),
+            status: next || null,
+          }),
+        });
+        toast(`Absensi ${row.name} tgl ${day} disimpan.`, 'success');
+      } catch (_) {
+        row.daily[day] = prev || null;
+        recomputeAttendanceRowCounts(row);
+        recomputeAttendanceBoardTotals();
+      } finally {
+        loading.value = false;
+      }
+    }
+
     async function loadAttendanceDaily() {
       if (!canAccessAttendance.value) return;
       const params = new URLSearchParams();
@@ -3570,6 +3638,7 @@ createApp({
       attendanceStatusOptions,
       attendanceShort,
       attendanceCellClass,
+      onAttendanceBoardCellChange,
       loadAttendanceDaily,
       loadAttendanceBoard,
       onAttendanceFilterChange,
@@ -5443,8 +5512,27 @@ createApp({
                     <tr v-for="row in g.rows" :key="'ar'+row.employee_id">
                       <td class="col-sticky"><strong>{{ row.name }}</strong></td>
                       <td v-if="isOwner && !attendanceFilter.branch_id" class="col-sticky-2">{{ row.branch_name }}</td>
-                      <td v-for="d in attendanceDays" :key="row.employee_id+'-a'+d" class="col-day" :class="attendanceCellClass(row.daily[d])">
-                        {{ attendanceShort(row.daily[d]) }}
+                      <td
+                        v-for="d in attendanceDays"
+                        :key="row.employee_id+'-a'+d"
+                        class="col-day"
+                        :class="[attendanceCellClass(row.daily[d]), isOwner ? 'att-cell-editable' : '']"
+                      >
+                        <select
+                          v-if="isOwner"
+                          class="att-board-select"
+                          :class="attendanceCellClass(row.daily[d])"
+                          :value="row.daily[d] || ''"
+                          :disabled="loading"
+                          @change="onAttendanceBoardCellChange(row, d, $event)"
+                        >
+                          <option value="">—</option>
+                          <option value="present">H</option>
+                          <option value="leave">I</option>
+                          <option value="sick">S</option>
+                          <option value="absent">A</option>
+                        </select>
+                        <template v-else>{{ attendanceShort(row.daily[d]) }}</template>
                       </td>
                       <td><strong class="att-present">{{ row.counts?.present ?? 0 }}</strong></td>
                       <td><strong class="att-leave">{{ row.counts?.leave ?? 0 }}</strong></td>
@@ -5461,7 +5549,9 @@ createApp({
               </table>
             </div>
             <p class="closing-hint">
-              Sel baca-saja. Untuk mengubah, gunakan tab Harian. H=Hadir, I=Izin, S=Sakit, A=Alpha.
+              <template v-if="isOwner">Owner dapat mengubah langsung di sel board. Pilih — untuk mengosongkan. </template>
+              <template v-else>Sel baca-saja. Untuk mengubah, gunakan tab Harian. </template>
+              H=Hadir, I=Izin, S=Sakit, A=Alpha.
             </p>
           </div>
         </section>

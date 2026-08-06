@@ -134,6 +134,73 @@ class AttendanceController extends Controller
         ]);
     }
 
+    public function upsertCell(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (! $user->isOwner()) {
+            return response()->json([
+                'message' => 'Hanya Owner yang dapat mengubah absensi dari board bulanan.',
+            ], 403);
+        }
+
+        $data = $request->validate([
+            'employee_id' => ['required', 'integer', 'exists:employees,id'],
+            'date' => ['required', 'date'],
+            'status' => ['nullable', Rule::in(EmployeeAttendance::STATUSES)],
+            'note' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $date = Carbon::parse($data['date'])->toDateString();
+        $employeeId = (int) $data['employee_id'];
+
+        $allowed = $this->eligibleEmployeesQuery(null)->where('employees.id', $employeeId)->exists();
+        if (! $allowed) {
+            return response()->json([
+                'message' => 'Karyawan tidak valid untuk absensi.',
+            ], 422);
+        }
+
+        $this->payrollLockChecker->assertEmployeeDateOpen($employeeId, $date);
+
+        $status = $data['status'] ?? null;
+        if ($status === null || $status === '') {
+            EmployeeAttendance::query()
+                ->where('employee_id', $employeeId)
+                ->whereDate('attendance_date', $date)
+                ->delete();
+
+            return response()->json([
+                'message' => 'Absensi tanggal tersebut dihapus.',
+                'data' => [
+                    'employee_id' => $employeeId,
+                    'date' => $date,
+                    'status' => null,
+                ],
+            ]);
+        }
+
+        $att = EmployeeAttendance::query()->updateOrCreate(
+            [
+                'employee_id' => $employeeId,
+                'attendance_date' => $date,
+            ],
+            [
+                'status' => $status,
+                'note' => $data['note'] ?? null,
+                'input_by' => $user->id,
+            ]
+        );
+
+        return response()->json([
+            'message' => 'Absensi berhasil diperbarui.',
+            'data' => [
+                'employee_id' => $employeeId,
+                'date' => $date,
+                'status' => $att->status,
+            ],
+        ]);
+    }
+
     public function board(Request $request): JsonResponse
     {
         $user = $request->user();

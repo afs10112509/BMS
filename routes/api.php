@@ -139,6 +139,7 @@ Route::middleware(['auth:sanctum', 'admin.branch'])->group(function () {
     Route::get('/attendance/daily', [AttendanceController::class, 'daily']);
     Route::put('/attendance/daily', [AttendanceController::class, 'upsertDaily']);
     Route::get('/attendance/board', [AttendanceController::class, 'board']);
+    Route::put('/attendance/cell', [AttendanceController::class, 'upsertCell'])->middleware('role:owner');
 
     // Konter: allows_service=true (admin bengkel → 403; owner lolos)
     Route::middleware('branch.type:konter')->group(function () {
