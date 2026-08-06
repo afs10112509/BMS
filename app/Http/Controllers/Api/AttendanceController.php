@@ -28,7 +28,7 @@ class AttendanceController extends Controller
         ]);
 
         $date = Carbon::parse($data['date'])->toDateString();
-        $branchId = $this->resolveBranchId($user, $data['branch_id'] ?? null, requireBranch: true);
+        $branchId = $this->resolveBranchId($user, $data['branch_id'] ?? null, requireBranch: false);
         if ($branchId instanceof JsonResponse) {
             return $branchId;
         }
@@ -77,7 +77,7 @@ class AttendanceController extends Controller
         ]);
 
         $date = Carbon::parse($data['date'])->toDateString();
-        $branchId = $this->resolveBranchId($user, $data['branch_id'] ?? null, requireBranch: true);
+        $branchId = $this->resolveBranchId($user, $data['branch_id'] ?? null, requireBranch: false);
         if ($branchId instanceof JsonResponse) {
             return $branchId;
         }
@@ -234,15 +234,15 @@ class AttendanceController extends Controller
     {
         $query = Employee::query()
             ->with('branch:id,name,type')
-            ->where('status', 'active')
-            ->where(function ($q) {
-                $q->whereNull('position')
-                    ->orWhereRaw('LOWER(TRIM(position)) NOT IN (?, ?)', ['owner', 'pemilik']);
-            })
-            ->orderBy('name');
+            ->join('branches', 'branches.id', '=', 'employees.branch_id')
+            ->where('employees.status', 'active')
+            ->withoutManagement()
+            ->orderBy('branches.name')
+            ->orderBy('employees.name')
+            ->select('employees.*');
 
         if ($branchId) {
-            $query->where('branch_id', $branchId);
+            $query->where('employees.branch_id', $branchId);
         }
 
         return $query;

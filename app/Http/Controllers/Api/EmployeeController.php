@@ -47,9 +47,19 @@ class EmployeeController extends Controller
             return response()->json(['message' => 'Akses ditolak.'], 403);
         }
 
+        if ($request->filled('has_position')) {
+            $code = mb_strtolower(trim($request->string('has_position')->toString()));
+            if (in_array($code, Employee::POSITION_CODES, true)) {
+                $query->withPosition($code);
+            }
+        }
+
         return response()->json([
             'message' => 'Daftar karyawan berhasil diambil.',
             'data' => $query->get(),
+            'meta' => [
+                'position_options' => Employee::positionOptions(),
+            ],
         ]);
     }
 
@@ -59,17 +69,21 @@ class EmployeeController extends Controller
             'branch_id' => ['required', 'integer', 'exists:branches,id'],
             'name' => ['required', 'string', 'max:255'],
             'phone' => ['required', 'string', 'max:50'],
+            'positions' => ['nullable', 'array'],
+            'positions.*' => ['string', Rule::in(Employee::POSITION_CODES)],
             'position' => ['nullable', 'string', 'max:100'],
             'status' => ['nullable', Rule::in(['active', 'inactive'])],
             'joined_at' => ['nullable', 'date'],
             'notes' => ['nullable', 'string'],
         ]);
 
+        $positions = Employee::normalizePositions($data['positions'] ?? []);
+
         $employee = Employee::query()->create([
             'branch_id' => $data['branch_id'],
             'name' => $data['name'],
             'phone' => $data['phone'],
-            'position' => $data['position'] ?? null,
+            'positions' => $positions,
             'status' => $data['status'] ?? 'active',
             'joined_at' => $data['joined_at'] ?? null,
             'notes' => $data['notes'] ?? null,
@@ -87,11 +101,19 @@ class EmployeeController extends Controller
             'branch_id' => ['sometimes', 'integer', 'exists:branches,id'],
             'name' => ['sometimes', 'string', 'max:255'],
             'phone' => ['sometimes', 'required', 'string', 'max:50'],
+            'positions' => ['nullable', 'array'],
+            'positions.*' => ['string', Rule::in(Employee::POSITION_CODES)],
             'position' => ['nullable', 'string', 'max:100'],
             'status' => ['sometimes', Rule::in(['active', 'inactive'])],
             'joined_at' => ['nullable', 'date'],
             'notes' => ['nullable', 'string'],
         ]);
+
+        if (array_key_exists('positions', $data)) {
+            $data['positions'] = Employee::normalizePositions($data['positions'] ?? []);
+        }
+
+        unset($data['position']);
 
         $employee->fill($data);
         $employee->save();

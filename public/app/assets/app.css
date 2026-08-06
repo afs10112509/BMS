@@ -802,6 +802,27 @@ tfoot td { background: #F8FAFC; border-top: 2px solid var(--line); font-weight: 
 .radio-pill.active-income { border-color: var(--income); background: #ECFDF5; color: #047857; }
 .radio-pill.active-expense { border-color: var(--expense); background: #FEF2F2; color: #B91C1C; }
 
+.position-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.position-pill {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 12px;
+  background: #fff;
+  font-weight: 650;
+  font-size: .9rem;
+  cursor: pointer;
+  color: var(--ink);
+}
+.position-pill.active {
+  border-color: #0F766E;
+  background: #F0FDFA;
+  color: #0F766E;
+}
+
 .diff-preview {
   border-radius: 12px; padding: 10px 12px; font-weight: 700; font-size: .9rem;
 }

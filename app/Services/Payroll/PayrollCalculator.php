@@ -50,8 +50,8 @@ class PayrollCalculator
 
         $result = [];
         foreach ($employees as $employee) {
-            $isPromotor = Payroll::isPromotorPosition($employee->position);
-            $isTechnician = Payroll::isTechnicianPosition($employee->position);
+            $isPromotor = $employee->isPromotor();
+            $isTechnician = $employee->isTechnician();
             $days = (int) ($presentDays[$employee->id] ?? 0);
             $qty = (int) ($closingQty[$employee->id] ?? 0);
             $profit = Money::of($serviceProfit[$employee->id] ?? 0);
@@ -96,8 +96,8 @@ class PayrollCalculator
     public function emptyAuto(Employee $employee): array
     {
         return [
-            'is_promotor' => Payroll::isPromotorPosition($employee->position),
-            'is_technician' => Payroll::isTechnicianPosition($employee->position),
+            'is_promotor' => $employee->isPromotor(),
+            'is_technician' => $employee->isTechnician(),
             'present_days' => 0,
             'gapok' => '0.00',
             'closing_qty' => 0,

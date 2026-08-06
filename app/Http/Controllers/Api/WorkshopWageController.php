@@ -617,10 +617,7 @@ class WorkshopWageController extends Controller
         return Employee::query()
             ->where('branch_id', $branchId)
             ->where('status', 'active')
-            ->where(function ($q) {
-                $q->whereNull('position')
-                    ->orWhereRaw('LOWER(TRIM(position)) NOT IN (?, ?)', ['owner', 'pemilik']);
-            })
+            ->withoutManagement()
             ->orderBy('name');
     }
 }

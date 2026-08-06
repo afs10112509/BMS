@@ -79,4 +79,40 @@ class AdminController extends Controller
             'data' => $admin->fresh()->load(['branch:id,name,type', 'branch.branchType:id,code,name,allows_service,status']),
         ]);
     }
+
+    public function destroy(User $admin): JsonResponse
+    {
+        if ($admin->role !== 'admin') {
+            return response()->json([
+                'message' => 'Hanya akun admin cabang yang dapat dihapus di sini.',
+            ], 422);
+        }
+
+        $blockers = [];
+        if ($admin->transactions()->exists()) {
+            $blockers[] = 'transaksi';
+        }
+        if ($admin->reconciliations()->exists()) {
+            $blockers[] = 'rekonsiliasi';
+        }
+        if ($admin->serviceRecords()->exists()) {
+            $blockers[] = 'catatan servis';
+        }
+        if ($admin->requestedTransfers()->exists()) {
+            $blockers[] = 'transfer antar cabang';
+        }
+
+        if ($blockers !== []) {
+            return response()->json([
+                'message' => 'Admin tidak dapat dihapus karena masih punya data terkait: '.implode(', ', $blockers).'.',
+            ], 422);
+        }
+
+        $admin->tokens()->delete();
+        $admin->delete();
+
+        return response()->json([
+            'message' => 'Admin cabang berhasil dihapus.',
+        ]);
+    }
 }

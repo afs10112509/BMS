@@ -337,10 +337,7 @@ class DashboardController extends Controller
                     ->pluck('id');
                 $q->whereIn('branch_id', $konterIds);
             })
-            ->where(function ($q) {
-                $q->whereNull('position')
-                    ->orWhereRaw('LOWER(TRIM(position)) NOT IN (?, ?)', ['owner', 'pemilik']);
-            })
+            ->withoutManagement()
             ->pluck('id');
 
         $from = Carbon::create($year, $month, 1)->toDateString();

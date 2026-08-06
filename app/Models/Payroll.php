@@ -105,9 +105,7 @@ class Payroll extends Model
 
     public static function isTechnicianPosition(?string $position): bool
     {
-        $pos = self::normalizePosition($position);
-
-        return str_contains($pos, 'teknisi') || str_contains($pos, 'service');
+        return str_contains(self::normalizePosition($position), 'teknisi');
     }
 
     public static function computeTotal(

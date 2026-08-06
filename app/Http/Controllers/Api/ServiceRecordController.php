@@ -110,6 +110,12 @@ class ServiceRecordController extends Controller
             ], 422);
         }
 
+        if (! $employee->isTechnician()) {
+            return response()->json([
+                'message' => 'Karyawan harus memiliki jabatan Teknisi.',
+            ], 422);
+        }
+
         $this->payrollLockChecker->assertEmployeeDateOpen(
             $employee->id,
             Carbon::parse($data['service_date'])->toDateString(),
@@ -179,6 +185,11 @@ class ServiceRecordController extends Controller
             if ($employee->status !== 'active' && (int) $employee->id !== (int) $serviceRecord->employee_id) {
                 return response()->json([
                     'message' => 'Teknisi harus berstatus aktif.',
+                ], 422);
+            }
+            if (! $employee->isTechnician()) {
+                return response()->json([
+                    'message' => 'Karyawan harus memiliki jabatan Teknisi.',
                 ], 422);
             }
         }

@@ -190,6 +190,8 @@ return [
         'allows_service' => 'izin servis',
         'phone' => 'nomor telepon',
         'position' => 'jabatan',
+        'positions' => 'jabatan',
+        'positions.*' => 'jabatan',
         'joined_at' => 'tanggal bergabung',
         'notes' => 'catatan',
         'note' => 'catatan',

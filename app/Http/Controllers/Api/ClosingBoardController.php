@@ -54,11 +54,8 @@ class ClosingBoardController extends Controller
             ->whereHas('branch', function ($q) {
                 $q->where('type', Branch::TYPE_KONTER);
             })
-            // Closingan non-promotor: jangan tampilkan jabatan owner/pemilik.
-            ->where(function ($q) {
-                $q->whereNull('position')
-                    ->orWhereRaw('LOWER(TRIM(position)) NOT IN (?, ?)', ['owner', 'pemilik']);
-            })
+            // Non-manajemen: sembunyikan Owner/PIC.
+            ->withoutManagement()
             ->orderBy('name');
 
         if ($branchId) {

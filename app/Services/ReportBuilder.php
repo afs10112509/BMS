@@ -553,10 +553,7 @@ class ReportBuilder
                     ->pluck('id');
                 $q->whereIn('branch_id', $konterIds);
             })
-            ->where(function ($q) {
-                $q->whereNull('position')
-                    ->orWhereRaw('LOWER(TRIM(position)) NOT IN (?, ?)', ['owner', 'pemilik']);
-            })
+            ->withoutManagement()
             ->orderBy('name')
             ->get();
 
