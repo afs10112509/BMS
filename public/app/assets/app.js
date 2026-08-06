@@ -6007,7 +6007,7 @@ createApp({
                           v-if="row.status==='locked'"
                           class="badge"
                           :class="row.is_paid ? 'badge-approved' : 'badge-pending'"
-                          :title="row.is_paid && row.paid_at ? ('Dibayar: ' + formatDate(row.paid_at)) : ''"
+                          :title="row.is_paid && row.paid_at ? ('Dibayar: ' + formatDateTime(row.paid_at)) : ''"
                         >{{ row.is_paid ? 'Lunas' : 'Belum' }}</span>
                         <span v-else class="muted">—</span>
                       </td>
