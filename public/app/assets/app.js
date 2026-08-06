@@ -3131,6 +3131,21 @@ createApp({
       }
     }
 
+    async function deleteAdmin(a) {
+      if (!a?.id) return;
+      if (!confirm(`Hapus admin "${a.name}" (${a.email})?`)) return;
+      loading.value = true;
+      try {
+        await api(`/admins/${a.id}`, { method: 'DELETE' });
+        toast('Admin cabang berhasil dihapus.', 'success');
+        if (adminForm.id === a.id) resetAdminForm();
+        await refreshCurrent();
+      } catch (_) {
+      } finally {
+        loading.value = false;
+      }
+    }
+
     async function submitCategory() {
       if (!categoryForm.name.trim()) {
         toast('Nama kategori wajib diisi.', 'error');
@@ -3513,6 +3528,7 @@ createApp({
       resetAdminForm,
       editAdmin,
       submitAdmin,
+      deleteAdmin,
       loadEmployees,
       closingBoard,
       closingFilter,
@@ -6147,7 +6163,10 @@ createApp({
                       <td>{{ a.name }}</td>
                       <td>{{ a.email }}</td>
                       <td>{{ a.branch?.name }}</td>
-                      <td><button class="btn btn-ghost btn-sm" @click="editAdmin(a)">Edit</button></td>
+                      <td>
+                        <button class="btn btn-ghost btn-sm" type="button" @click="editAdmin(a)">Edit</button>
+                        <button class="btn btn-danger btn-sm" type="button" @click="deleteAdmin(a)">Hapus</button>
+                      </td>
                     </tr>
                   </tbody>
                 </table>

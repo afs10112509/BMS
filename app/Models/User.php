@@ -47,6 +47,16 @@ class User extends Authenticatable
         return $this->hasMany(Reconciliation::class);
     }
 
+    public function serviceRecords(): HasMany
+    {
+        return $this->hasMany(ServiceRecord::class);
+    }
+
+    public function requestedTransfers(): HasMany
+    {
+        return $this->hasMany(InterBranchTransfer::class, 'requested_by');
+    }
+
     public function auditLogs(): HasMany
     {
         return $this->hasMany(AuditLog::class);
