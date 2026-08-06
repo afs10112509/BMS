@@ -5821,7 +5821,7 @@ createApp({
 
             <div class="filter-meta">
               {{ payrollMonthLabel }}
-              · Total bersih: <strong>{{ formatRp(payrollBoard.meta?.totals?.grand_total || 0) }}</strong>
+              · Total bersih: <strong :class="Number(payrollBoard.meta?.totals?.grand_total || 0) < 0 ? 'value-expense' : ''">{{ formatRp(payrollBoard.meta?.totals?.grand_total || 0) }}</strong>
               · Gapok <strong>{{ formatRp(payrollBoard.meta?.totals?.gapok || 0) }}</strong>
               · HP <strong>{{ formatRp(payrollBoard.meta?.totals?.insentif_hp || 0) }}</strong>
               · Service <strong>{{ formatRp(payrollBoard.meta?.totals?.service_incentive || 0) }}</strong>
@@ -5855,7 +5855,7 @@ createApp({
                     <tr v-if="isOwner && !payrollFilter.branch_id" class="closing-group-row">
                       <td :colspan="isOwner && !payrollFilter.branch_id ? 15 : 14">
                         <strong>{{ g.branch_name }}</strong>
-                        <span class="muted"> · {{ formatRp(g.totals?.grand_total || 0) }}</span>
+                        <span class="muted"> · <span :class="Number(g.totals?.grand_total || 0) < 0 ? 'value-expense' : ''">{{ formatRp(g.totals?.grand_total || 0) }}</span></span>
                       </td>
                     </tr>
                     <tr v-for="row in g.rows" :key="'pr'+row.employee_id">
@@ -5927,7 +5927,7 @@ createApp({
                           @input="onPayrollManualInput(row, 'pengeluaran', $event)"
                         />
                       </td>
-                      <td><strong>{{ formatRp(row.total) }}</strong></td>
+                      <td><strong :class="Number(row.total) < 0 ? 'value-expense' : ''">{{ formatRp(row.total) }}</strong></td>
                       <td>
                         <span class="badge" :class="row.status==='locked' ? 'badge-rejected' : 'badge-approved'">
                           {{ row.status==='locked' ? 'Terkunci' : 'Draf' }}
@@ -5958,7 +5958,7 @@ createApp({
                       <td><strong>{{ formatRp(g.totals?.bonus_absen || 0) }}</strong></td>
                       <td><strong>{{ formatRp(g.totals?.hutang || 0) }}</strong></td>
                       <td><strong>{{ formatRp(g.totals?.pengeluaran || 0) }}</strong></td>
-                      <td><strong>{{ formatRp(g.totals?.grand_total || 0) }}</strong></td>
+                      <td><strong :class="Number(g.totals?.grand_total || 0) < 0 ? 'value-expense' : ''">{{ formatRp(g.totals?.grand_total || 0) }}</strong></td>
                       <td colspan="2"></td>
                     </tr>
                   </template>
@@ -7236,7 +7236,7 @@ createApp({
             <div v-if="payrollDetailHas(payrollDetail.data.bonus_absen)"><span>Bonus</span><strong>{{ formatRp(payrollDetail.data.bonus_absen) }}</strong></div>
             <div v-if="payrollDetailHas(payrollDetail.data.hutang)"><span>Hutang</span><strong>{{ formatRp(payrollDetail.data.hutang) }}</strong></div>
             <div v-if="payrollDetailHas(payrollDetail.data.pengeluaran)"><span>Pengeluaran</span><strong>{{ formatRp(payrollDetail.data.pengeluaran) }}</strong></div>
-            <div class="payroll-detail-total"><span>Total bersih</span><strong>{{ formatRp(payrollDetail.data.total) }}</strong></div>
+            <div class="payroll-detail-total"><span>Total bersih</span><strong :class="Number(payrollDetail.data.total) < 0 ? 'value-expense' : ''">{{ formatRp(payrollDetail.data.total) }}</strong></div>
           </div>
           <template v-if="(payrollDetail.services || []).length">
             <div class="panel-title" style="margin-top:14px">Service bulan ini</div>
