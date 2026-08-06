@@ -106,6 +106,8 @@ class PayrollController extends Controller
                 'note' => $manual['note'],
                 'year' => $year,
                 'month' => $month,
+                'is_paid' => (bool) $payroll?->isPaid(),
+                'paid_at' => $payroll?->paid_at?->toIso8601String(),
             ];
         })->values();
 
@@ -256,10 +258,26 @@ class PayrollController extends Controller
             $query->where('branch_id', $branchId);
         }
 
+        $paidCount = Payroll::query()
+            ->where('year', $year)
+            ->where('month', $month)
+            ->where('status', Payroll::STATUS_LOCKED)
+            ->whereNotNull('paid_at')
+            ->when($branchId, fn ($q) => $q->where('branch_id', $branchId))
+            ->count();
+
+        if ($paidCount > 0) {
+            return response()->json([
+                'message' => 'Ada slip yang sudah ditandai dibayar. Batalkan status bayar dulu sebelum membuka kunci.',
+            ], 422);
+        }
+
         $updated = $query->update([
             'status' => Payroll::STATUS_DRAFT,
             'locked_at' => null,
             'locked_by' => null,
+            'paid_at' => null,
+            'paid_by' => null,
         ]);
 
         return response()->json([
@@ -271,6 +289,91 @@ class PayrollController extends Controller
                 'month' => $month,
                 'branch_id' => $branchId,
                 'unlocked' => $updated,
+            ],
+        ]);
+    }
+
+    public function markPaid(Request $request): JsonResponse
+    {
+        return $this->setPaidState($request, paid: true);
+    }
+
+    public function markUnpaid(Request $request): JsonResponse
+    {
+        return $this->setPaidState($request, paid: false);
+    }
+
+    private function setPaidState(Request $request, bool $paid): JsonResponse
+    {
+        $user = $request->user();
+
+        $data = $request->validate([
+            'employee_id' => ['required', 'integer', 'exists:employees,id'],
+            'year' => ['required', 'integer', 'min:2020', 'max:2100'],
+            'month' => ['required', 'integer', 'min:1', 'max:12'],
+        ]);
+
+        $year = (int) $data['year'];
+        $month = (int) $data['month'];
+        $employeeId = (int) $data['employee_id'];
+
+        $branchId = $this->resolveBranchId($user, null, requireBranch: false);
+        if ($branchId instanceof JsonResponse) {
+            return $branchId;
+        }
+
+        $employee = $this->eligibleEmployeesQuery($branchId)
+            ->where('employees.id', $employeeId)
+            ->first();
+
+        if (! $employee) {
+            return response()->json(['message' => 'Karyawan tidak ditemukan atau tidak boleh diakses.'], 404);
+        }
+
+        $payroll = Payroll::query()
+            ->where('employee_id', $employeeId)
+            ->where('year', $year)
+            ->where('month', $month)
+            ->first();
+
+        if (! $payroll || ! $payroll->isLocked()) {
+            return response()->json([
+                'message' => 'Slip harus dikunci dulu sebelum menandai status bayar.',
+            ], 422);
+        }
+
+        if ($paid) {
+            if ($payroll->isPaid()) {
+                return response()->json(['message' => 'Slip ini sudah ditandai dibayar.'], 422);
+            }
+            $payroll->paid_at = now();
+            $payroll->paid_by = $user->id;
+            $payroll->save();
+
+            return response()->json([
+                'message' => 'Slip ditandai sudah dibayar.',
+                'data' => [
+                    'employee_id' => $employeeId,
+                    'is_paid' => true,
+                    'paid_at' => $payroll->paid_at?->toIso8601String(),
+                ],
+            ]);
+        }
+
+        if (! $payroll->isPaid()) {
+            return response()->json(['message' => 'Slip ini belum ditandai dibayar.'], 422);
+        }
+
+        $payroll->paid_at = null;
+        $payroll->paid_by = null;
+        $payroll->save();
+
+        return response()->json([
+            'message' => 'Status bayar dibatalkan.',
+            'data' => [
+                'employee_id' => $employeeId,
+                'is_paid' => false,
+                'paid_at' => null,
             ],
         ]);
     }
@@ -351,6 +454,8 @@ class PayrollController extends Controller
                 ),
             ], $auto);
             $row['gapok'] = $gapok;
+            $row['is_paid'] = (bool) $payroll?->isPaid();
+            $row['paid_at'] = $payroll?->paid_at?->toIso8601String();
         }
 
         $services = ServiceRecord::query()

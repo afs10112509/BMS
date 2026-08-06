@@ -31,6 +31,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'calculated_at',
     'locked_at',
     'locked_by',
+    'paid_at',
+    'paid_by',
     'input_by',
 ])]
 class Payroll extends Model
@@ -65,6 +67,7 @@ class Payroll extends Model
             'total' => 'decimal:2',
             'calculated_at' => 'datetime',
             'locked_at' => 'datetime',
+            'paid_at' => 'datetime',
         ];
     }
 
@@ -83,6 +86,11 @@ class Payroll extends Model
         return $this->belongsTo(User::class, 'locked_by');
     }
 
+    public function payer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'paid_by');
+    }
+
     public function inputter(): BelongsTo
     {
         return $this->belongsTo(User::class, 'input_by');
@@ -91,6 +99,11 @@ class Payroll extends Model
     public function isLocked(): bool
     {
         return $this->status === self::STATUS_LOCKED;
+    }
+
+    public function isPaid(): bool
+    {
+        return $this->paid_at !== null;
     }
 
     public static function normalizePosition(?string $position): string

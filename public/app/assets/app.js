@@ -2023,6 +2023,72 @@ createApp({
       }
     }
 
+    async function markPayrollPaid(row) {
+      if (row.status !== 'locked') {
+        toast('Kunci slip dulu sebelum menandai dibayar.', 'error');
+        return;
+      }
+      const ok = await askClosingConfirm({
+        title: 'Tandai Dibayar',
+        message: `Tandai gaji ${row.name} periode ${payrollMonthLabel.value} sudah dibayar?`,
+        detail: `Total ${formatRp(row.total)}`,
+        confirmLabel: 'Sudah Dibayar',
+        danger: false,
+      });
+      if (!ok) return;
+      loading.value = true;
+      try {
+        await api('/payrolls/mark-paid', {
+          method: 'POST',
+          body: JSON.stringify({
+            employee_id: Number(row.employee_id),
+            year: Number(payrollFilter.year),
+            month: Number(payrollFilter.month),
+          }),
+        });
+        toast(`Gaji ${row.name} ditandai sudah dibayar.`, 'success');
+        await loadPayrollBoard();
+        if (payrollDetail.open && payrollDetail.data?.employee_id === row.employee_id) {
+          await openPayrollDetail(row);
+        }
+      } catch (_) {
+        toast('Gagal menandai status bayar.', 'error');
+      } finally {
+        loading.value = false;
+      }
+    }
+
+    async function markPayrollUnpaid(row) {
+      const ok = await askClosingConfirm({
+        title: 'Batalkan Status Bayar',
+        message: `Batalkan tanda dibayar untuk ${row.name}?`,
+        detail: payrollMonthLabel.value,
+        confirmLabel: 'Batalkan Bayar',
+        danger: true,
+      });
+      if (!ok) return;
+      loading.value = true;
+      try {
+        await api('/payrolls/mark-unpaid', {
+          method: 'POST',
+          body: JSON.stringify({
+            employee_id: Number(row.employee_id),
+            year: Number(payrollFilter.year),
+            month: Number(payrollFilter.month),
+          }),
+        });
+        toast(`Status bayar ${row.name} dibatalkan.`, 'success');
+        await loadPayrollBoard();
+        if (payrollDetail.open && payrollDetail.data?.employee_id === row.employee_id) {
+          await openPayrollDetail(row);
+        }
+      } catch (_) {
+        toast('Gagal membatalkan status bayar.', 'error');
+      } finally {
+        loading.value = false;
+      }
+    }
+
     function closePayrollDetail() {
       payrollDetail.open = false;
     }
@@ -3840,6 +3906,8 @@ createApp({
       closePayrollDetail,
       payrollDetailHas,
       openPayrollWhatsApp,
+      markPayrollPaid,
+      markPayrollUnpaid,
       onPayrollManualInput,
       onPayrollFocus,
       onPayrollKeydown,
@@ -5847,13 +5915,14 @@ createApp({
                     <th title="Pengeluaran">Keluar</th>
                     <th>Total</th>
                     <th>Status</th>
+                    <th>Bayar</th>
                     <th>Aksi</th>
                   </tr>
                 </thead>
                 <tbody>
                   <template v-for="(g, gi) in payrollBoard.groups" :key="'pg'+gi">
                     <tr v-if="isOwner && !payrollFilter.branch_id" class="closing-group-row">
-                      <td :colspan="isOwner && !payrollFilter.branch_id ? 15 : 14">
+                      <td :colspan="isOwner && !payrollFilter.branch_id ? 16 : 15">
                         <strong>{{ g.branch_name }}</strong>
                         <span class="muted"> · <span :class="Number(g.totals?.grand_total || 0) < 0 ? 'value-expense' : ''">{{ formatRp(g.totals?.grand_total || 0) }}</span></span>
                       </td>
@@ -5934,6 +6003,15 @@ createApp({
                         </span>
                       </td>
                       <td>
+                        <span
+                          v-if="row.status==='locked'"
+                          class="badge"
+                          :class="row.is_paid ? 'badge-approved' : 'badge-pending'"
+                          :title="row.is_paid && row.paid_at ? ('Dibayar: ' + formatDate(row.paid_at)) : ''"
+                        >{{ row.is_paid ? 'Lunas' : 'Belum' }}</span>
+                        <span v-else class="muted">—</span>
+                      </td>
+                      <td>
                         <div class="payroll-row-actions">
                           <button class="btn btn-ghost btn-sm" type="button" @click="openPayrollDetail(row)">Detail</button>
                           <button
@@ -5943,6 +6021,20 @@ createApp({
                             :disabled="!row.phone"
                             @click="openPayrollWhatsApp(row)"
                           >WA</button>
+                          <button
+                            v-if="row.status==='locked' && !row.is_paid"
+                            class="btn btn-primary btn-sm"
+                            type="button"
+                            :disabled="loading"
+                            @click="markPayrollPaid(row)"
+                          >Bayar</button>
+                          <button
+                            v-if="row.status==='locked' && row.is_paid"
+                            class="btn btn-ghost btn-sm"
+                            type="button"
+                            :disabled="loading"
+                            @click="markPayrollUnpaid(row)"
+                          >Batal</button>
                         </div>
                       </td>
                     </tr>
@@ -5959,11 +6051,11 @@ createApp({
                       <td><strong>{{ formatRp(g.totals?.hutang || 0) }}</strong></td>
                       <td><strong>{{ formatRp(g.totals?.pengeluaran || 0) }}</strong></td>
                       <td><strong :class="Number(g.totals?.grand_total || 0) < 0 ? 'value-expense' : ''">{{ formatRp(g.totals?.grand_total || 0) }}</strong></td>
-                      <td colspan="2"></td>
+                      <td colspan="3"></td>
                     </tr>
                   </template>
                   <tr v-if="!(payrollBoard.groups || []).length">
-                    <td :colspan="isOwner && !payrollFilter.branch_id ? 15 : 14">
+                    <td :colspan="isOwner && !payrollFilter.branch_id ? 16 : 15">
                       Belum ada karyawan aktif untuk periode ini.
                     </td>
                   </tr>
@@ -5973,6 +6065,7 @@ createApp({
             <p class="closing-hint">
               Gapok = Hadir × Rp50.000 (promotor = 0), bisa diubah manual lalu Simpan. HP = closing × Rp10.000.
               Svc = 50% profit service (teknisi). ACC/Bonus/Hutang/Keluar diisi manual.
+              Status bayar (Belum/Lunas) hanya setelah slip dikunci.
             </p>
           </div>
         </section>
@@ -7237,6 +7330,12 @@ createApp({
             <div v-if="payrollDetailHas(payrollDetail.data.hutang)"><span>Hutang</span><strong>{{ formatRp(payrollDetail.data.hutang) }}</strong></div>
             <div v-if="payrollDetailHas(payrollDetail.data.pengeluaran)"><span>Pengeluaran</span><strong>{{ formatRp(payrollDetail.data.pengeluaran) }}</strong></div>
             <div class="payroll-detail-total"><span>Total bersih</span><strong :class="Number(payrollDetail.data.total) < 0 ? 'value-expense' : ''">{{ formatRp(payrollDetail.data.total) }}</strong></div>
+            <div v-if="payrollDetail.data.status==='locked'">
+              <span>Status bayar</span>
+              <strong :class="payrollDetail.data.is_paid ? 'value-income' : 'value-expense'">
+                {{ payrollDetail.data.is_paid ? 'Sudah dibayar' : 'Belum dibayar' }}
+              </strong>
+            </div>
           </div>
           <template v-if="(payrollDetail.services || []).length">
             <div class="panel-title" style="margin-top:14px">Service bulan ini</div>
@@ -7262,12 +7361,26 @@ createApp({
           <button class="btn btn-ghost" type="button" @click="closePayrollDetail">Tutup</button>
           <button
             v-if="payrollDetail.data"
-            class="btn btn-primary"
+            class="btn btn-ghost"
             type="button"
             :disabled="!payrollDetail.data.phone"
             title="Buka WhatsApp ke nomor karyawan"
             @click="openPayrollWhatsApp(payrollDetail.data)"
           >Kirim WhatsApp</button>
+          <button
+            v-if="payrollDetail.data && payrollDetail.data.status==='locked' && !payrollDetail.data.is_paid"
+            class="btn btn-primary"
+            type="button"
+            :disabled="loading"
+            @click="markPayrollPaid(payrollDetail.data)"
+          >Tandai Dibayar</button>
+          <button
+            v-if="payrollDetail.data && payrollDetail.data.status==='locked' && payrollDetail.data.is_paid"
+            class="btn btn-ghost"
+            type="button"
+            :disabled="loading"
+            @click="markPayrollUnpaid(payrollDetail.data)"
+          >Batalkan Bayar</button>
         </div>
       </div>
     </div>
