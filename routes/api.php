@@ -163,6 +163,8 @@ Route::middleware(['auth:sanctum', 'admin.branch'])->group(function () {
         Route::put('/payrolls/save', [PayrollController::class, 'save']);
         Route::post('/payrolls/lock', [PayrollController::class, 'lock']);
         Route::post('/payrolls/unlock', [PayrollController::class, 'unlock']);
+        Route::post('/payrolls/mark-paid', [PayrollController::class, 'markPaid']);
+        Route::post('/payrolls/mark-unpaid', [PayrollController::class, 'markUnpaid']);
         Route::get('/payrolls/detail', [PayrollController::class, 'detail']);
     });
 

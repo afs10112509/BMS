@@ -138,6 +138,8 @@ class PayrollCalculator
             'year' => (int) $payroll->year,
             'month' => (int) $payroll->month,
             'locked_at' => $payroll->locked_at?->toIso8601String(),
+            'is_paid' => $payroll->isPaid(),
+            'paid_at' => $payroll->paid_at?->toIso8601String(),
         ];
     }
 }
