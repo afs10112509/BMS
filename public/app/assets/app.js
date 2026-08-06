@@ -5778,7 +5778,7 @@ createApp({
                     <th>Insentif HP</th>
                     <th>Service 50%</th>
                     <th>Insentif ACC</th>
-                    <th>Bonus Absen</th>
+                    <th>Bonus</th>
                     <th>Hutang</th>
                     <th>Pengeluaran</th>
                     <th>Total</th>
@@ -7148,7 +7148,7 @@ createApp({
             <div><span>Profit Service</span><strong>{{ formatRp(payrollDetail.data.service_profit) }}</strong></div>
             <div><span>Service 50%</span><strong>{{ formatRp(payrollDetail.data.service_incentive) }}</strong></div>
             <div><span>Insentif ACC</span><strong>{{ formatRp(payrollDetail.data.insentif_acc) }}</strong></div>
-            <div><span>Bonus Absen</span><strong>{{ formatRp(payrollDetail.data.bonus_absen) }}</strong></div>
+            <div><span>Bonus</span><strong>{{ formatRp(payrollDetail.data.bonus_absen) }}</strong></div>
             <div><span>Hutang</span><strong>{{ formatRp(payrollDetail.data.hutang) }}</strong></div>
             <div><span>Pengeluaran</span><strong>{{ formatRp(payrollDetail.data.pengeluaran) }}</strong></div>
             <div class="payroll-detail-total"><span>Total bersih</span><strong>{{ formatRp(payrollDetail.data.total) }}</strong></div>
