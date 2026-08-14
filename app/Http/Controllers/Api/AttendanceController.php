@@ -303,7 +303,8 @@ class AttendanceController extends Controller
             ->with('branch:id,name,type')
             ->join('branches', 'branches.id', '=', 'employees.branch_id')
             ->where('employees.status', 'active')
-            ->withoutManagement()
+            // PIC boleh diabsen; hanya Owner yang disembunyikan.
+            ->withoutOwner()
             ->orderBy('branches.name')
             ->orderBy('employees.name')
             ->select('employees.*');

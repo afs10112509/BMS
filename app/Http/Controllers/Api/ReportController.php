@@ -24,8 +24,12 @@ class ReportController extends Controller
         'absensi',
         'gaji',
         'upah',
+        'bagi-hasil',
         'closing',
         'rekonsiliasi',
+        'alur-kas',
+        'keuntungan-pulsa',
+        'brilink',
     ];
 
     public function __construct(
@@ -70,6 +74,7 @@ class ReportController extends Controller
             'type_filter' => $filters['type'],
             'category_id' => $filters['category_id'],
             'account_id' => $filters['account_id'],
+            'employee_id' => $filters['employee_id'] ?? null,
             'q' => $filters['q'],
             'disposition' => $request->string('disposition', 'attachment')->toString() === 'inline' ? 'inline' : 'attachment',
         ], fn ($v) => $v !== null && $v !== '');
@@ -110,7 +115,7 @@ class ReportController extends Controller
                 'type' => $type,
             ];
 
-            $landscape = in_array($type, ['transaksi', 'gaji', 'upah', 'servis'], true);
+            $landscape = in_array($type, ['transaksi', 'gaji', 'upah', 'bagi-hasil', 'servis', 'keuntungan-pulsa', 'brilink'], true);
 
             $pdf = Pdf::loadView('reports.pdf', $payload)
                 ->setPaper('a4', $landscape ? 'landscape' : 'portrait');
@@ -176,27 +181,49 @@ HTML;
 
     protected function assertType(string $type): void
     {
-        abort_unless(in_array($type, self::TYPES, true), 404, 'Jenis laporan tidak ditemukan.');
+        if (! in_array($type, self::TYPES, true)) {
+            abort(422, 'Jenis laporan tidak ditemukan: '.$type);
+        }
     }
 
     protected function authorizeType(User $user, string $type): void
     {
-        if ($type === 'gaji' && ! $user->isOwner()) {
-            abort(403, 'Laporan gaji hanya untuk owner.');
+        if ($user->isOwner()) {
+            return;
         }
 
-        if (in_array($type, ['servis', 'closing'], true) && $user->isAdmin()) {
+        // Admin / PIC bengkel: laporan upah cabang sendiri saja.
+        if ($type === 'upah' && ($user->isWorkshopAdmin() || $user->isWorkshopPicEmployee())) {
+            return;
+        }
+
+        // Admin bengkel: laporan arus kas bulanan cabang sendiri.
+        if ($type === 'alur-kas' && $user->isWorkshopAdmin()) {
+            return;
+        }
+
+        // PIC konter: laporan keuntungan pulsa cabang sendiri.
+        if ($type === 'keuntungan-pulsa' && $user->isCounterPicEmployee()) {
+            return;
+        }
+
+        // Brilink: Admin semua cabang + PIC cabang.
+        if ($type === 'brilink' && ($user->isAdmin() || $user->isPicEmployee())) {
+            return;
+        }
+
+        // Admin konter: laporan cabang (kecuali gaji / bagi-hasil / upah).
+        if ($user->isAdmin()) {
             $branch = Branch::query()->with('branchType')->find($user->branch_id);
-            if ($branch?->isWorkshop()) {
-                abort(403, 'Laporan ini hanya untuk cabang konter.');
+            if ($branch && ! $branch->isWorkshop()) {
+                if (in_array($type, ['gaji', 'bagi-hasil', 'upah'], true)) {
+                    abort(403, 'Laporan ini hanya dapat diakses oleh Owner.');
+                }
+
+                return;
             }
         }
 
-        if ($type === 'upah' && $user->isAdmin()) {
-            $branch = Branch::query()->with('branchType')->find($user->branch_id);
-            if (! $branch?->isWorkshop()) {
-                abort(403, 'Laporan upah hanya untuk cabang bengkel.');
-            }
-        }
+        abort(403, 'Laporan ini tidak dapat diakses dengan akun Anda.');
     }
 }

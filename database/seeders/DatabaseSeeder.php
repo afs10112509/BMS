@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
             BranchTypeSeeder::class,
             BranchSeeder::class,
             CategorySeeder::class,
+            AlurKasCategorySeeder::class,
             AccountSeeder::class,
             UserSeeder::class,
         ]);

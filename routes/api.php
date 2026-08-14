@@ -8,14 +8,21 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BranchController;
 use App\Http\Controllers\Api\BranchTypeController;
 use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\CashflowController;
+use App\Http\Controllers\Api\CashflowWorkbookController;
 use App\Http\Controllers\Api\ClosingBoardController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\DatabaseBackupController;
 use App\Http\Controllers\Api\EmployeeController;
 use App\Http\Controllers\Api\OpeningBalanceController;
 use App\Http\Controllers\Api\PayrollController;
 use App\Http\Controllers\Api\PeriodLockController;
+use App\Http\Controllers\Api\ProfitShareController;
+use App\Http\Controllers\Api\PulsaProfitController;
+use App\Http\Controllers\Api\BrilinkController;
 use App\Http\Controllers\Api\ReconciliationController;
 use App\Http\Controllers\Api\ReportController;
+use App\Http\Controllers\Api\SelfAttendanceController;
 use App\Http\Controllers\Api\ServiceRecordController;
 use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\TransferController;
@@ -82,7 +89,48 @@ Route::prefix('auth')->group(function () {
     });
 });
 
-Route::middleware(['auth:sanctum', 'admin.branch'])->group(function () {
+// Absensi mandiri karyawan (+ tinjau Owner/PIC + setting jam Owner)
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::get('/attendance/self/today', [SelfAttendanceController::class, 'today']);
+    Route::get('/attendance/self/history', [SelfAttendanceController::class, 'history']);
+    Route::post('/attendance/self/check-in', [SelfAttendanceController::class, 'checkIn']);
+    Route::post('/attendance/self/check-out', [SelfAttendanceController::class, 'checkOut']);
+    Route::post('/attendance/self/leave-sick', [SelfAttendanceController::class, 'leaveOrSick']);
+    Route::get('/attendance/self/photos/{attendance}/{side}', [SelfAttendanceController::class, 'photo'])
+        ->whereIn('side', ['in', 'out']);
+
+    Route::get('/attendance/reviews', [SelfAttendanceController::class, 'pendingReviews']);
+    Route::post('/attendance/reviews/{attendance}', [SelfAttendanceController::class, 'review']);
+
+    Route::get('/attendance/settings', [SelfAttendanceController::class, 'getSettings'])->middleware('role:owner');
+    Route::put('/attendance/settings', [SelfAttendanceController::class, 'saveSettings'])->middleware('role:owner');
+
+    // Laporan: Owner (semua jenis) + PIC bengkel (upah saja) — otorisasi di ReportController.
+    Route::get('/reports/{type}', [ReportController::class, 'show']);
+    Route::get('/reports/{type}/pdf-link', [ReportController::class, 'pdfLink']);
+    Route::get('/reports/{type}/pdf', [ReportController::class, 'pdf']);
+
+    // Keuntungan pulsa: Admin/PIC konter (mutasi) + Owner (pantau). Di luar block.employee agar PIC bisa akses.
+    Route::middleware('branch.type:konter')->group(function () {
+        Route::get('/pulsa-profits/providers', [PulsaProfitController::class, 'providers']);
+        Route::post('/pulsa-profits/providers', [PulsaProfitController::class, 'storeProvider']);
+        Route::put('/pulsa-profits/providers/{pulsaProvider}', [PulsaProfitController::class, 'updateProvider']);
+        Route::delete('/pulsa-profits/providers/{pulsaProvider}', [PulsaProfitController::class, 'destroyProvider']);
+        Route::get('/pulsa-profits', [PulsaProfitController::class, 'index']);
+        Route::get('/pulsa-profits/daily', [PulsaProfitController::class, 'daily']);
+        Route::put('/pulsa-profits/daily', [PulsaProfitController::class, 'upsertDaily']);
+        Route::delete('/pulsa-profits/{pulsaDailySheet}', [PulsaProfitController::class, 'destroy']);
+    });
+
+    // Brilink harian: semua cabang — Admin/PIC mutasi, Owner pantau. Belum otomatis ke kas.
+    Route::get('/brilink', [BrilinkController::class, 'index']);
+    Route::get('/brilink/daily', [BrilinkController::class, 'daily']);
+    Route::post('/brilink/daily/copy-previous', [BrilinkController::class, 'copyPrevious']);
+    Route::put('/brilink/daily', [BrilinkController::class, 'upsertDaily']);
+    Route::delete('/brilink/{brilinkDailySheet}', [BrilinkController::class, 'destroy']);
+});
+
+Route::middleware(['auth:sanctum', 'admin.branch', 'block.employee'])->group(function () {
     Route::get('/branches', [BranchController::class, 'index']);
     Route::post('/branches', [BranchController::class, 'store'])->middleware('role:owner');
     Route::put('/branches/{branch}', [BranchController::class, 'update'])->middleware('role:owner');
@@ -116,6 +164,7 @@ Route::middleware(['auth:sanctum', 'admin.branch'])->group(function () {
 
     Route::get('/transactions', [TransactionController::class, 'index']);
     Route::post('/transactions', [TransactionController::class, 'store']);
+    Route::post('/transactions/batch', [TransactionController::class, 'storeBatch']);
     Route::put('/transactions/{transaction}', [TransactionController::class, 'update']);
     Route::delete('/transactions/{transaction}', [TransactionController::class, 'destroy']);
 
@@ -128,6 +177,7 @@ Route::middleware(['auth:sanctum', 'admin.branch'])->group(function () {
 
     Route::get('/period-locks', [PeriodLockController::class, 'index'])->middleware('role:owner');
     Route::post('/period-locks', [PeriodLockController::class, 'store'])->middleware('role:owner');
+    Route::get('/reconciliations', [ReconciliationController::class, 'index']);
     Route::post('/reconciliations', [ReconciliationController::class, 'store']);
     Route::post('/adjustments', [AdjustmentController::class, 'store'])->middleware('role:owner');
 
@@ -137,6 +187,7 @@ Route::middleware(['auth:sanctum', 'admin.branch'])->group(function () {
     Route::get('/employees', [EmployeeController::class, 'index']);
     Route::post('/employees', [EmployeeController::class, 'store'])->middleware('role:owner');
     Route::put('/employees/{employee}', [EmployeeController::class, 'update'])->middleware('role:owner');
+    Route::put('/employees/{employee}/account', [EmployeeController::class, 'upsertAccount'])->middleware('role:owner');
     Route::delete('/employees/{employee}', [EmployeeController::class, 'destroy'])->middleware('role:owner');
 
     Route::get('/attendance/daily', [AttendanceController::class, 'daily']);
@@ -149,9 +200,12 @@ Route::middleware(['auth:sanctum', 'admin.branch'])->group(function () {
         Route::get('/closings/board', [ClosingBoardController::class, 'board']);
         Route::put('/closings/targets', [ClosingBoardController::class, 'upsertTarget']);
         Route::put('/closings/daily', [ClosingBoardController::class, 'upsertDaily']);
+        Route::post('/closings/lock', [ClosingBoardController::class, 'lock'])->middleware('role:owner');
+        Route::post('/closings/unlock', [ClosingBoardController::class, 'unlock'])->middleware('role:owner');
 
         Route::get('/service-records/technicians', [ServiceRecordController::class, 'technicians']);
         Route::get('/service-records', [ServiceRecordController::class, 'index']);
+        Route::post('/service-records/batch', [ServiceRecordController::class, 'storeBatch']);
         Route::post('/service-records', [ServiceRecordController::class, 'store']);
         Route::put('/service-records/{serviceRecord}', [ServiceRecordController::class, 'update']);
         Route::delete('/service-records/{serviceRecord}', [ServiceRecordController::class, 'destroy']);
@@ -166,14 +220,38 @@ Route::middleware(['auth:sanctum', 'admin.branch'])->group(function () {
         Route::post('/payrolls/mark-paid', [PayrollController::class, 'markPaid']);
         Route::post('/payrolls/mark-unpaid', [PayrollController::class, 'markUnpaid']);
         Route::get('/payrolls/detail', [PayrollController::class, 'detail']);
+
+        // Bagi hasil PIC per cabang (tahap 1: input manual)
+        Route::get('/profit-shares/board', [ProfitShareController::class, 'board']);
+        Route::get('/profit-shares/detail', [ProfitShareController::class, 'detail']);
+        Route::put('/profit-shares/save', [ProfitShareController::class, 'save']);
+        Route::post('/profit-shares/lock', [ProfitShareController::class, 'lock']);
+        Route::post('/profit-shares/unlock', [ProfitShareController::class, 'unlock']);
+        Route::post('/profit-shares/copy-previous', [ProfitShareController::class, 'copyPrevious']);
+
+        Route::get('/system/database-backups', [DatabaseBackupController::class, 'index']);
+        Route::put('/system/database-backups/schedule', [DatabaseBackupController::class, 'updateSchedule']);
+        Route::post('/system/database-backups', [DatabaseBackupController::class, 'store'])
+            ->middleware('throttle:3,10');
+        Route::post('/system/database-backups/upload', [DatabaseBackupController::class, 'upload'])
+            ->middleware('throttle:3,10');
+        Route::get('/system/database-backups/{file}/download', [DatabaseBackupController::class, 'download'])
+            ->where('file', 'bms_db_[0-9]{8}_[0-9]{6}\\.dump');
+        Route::post('/system/database-backups/{file}/restore', [DatabaseBackupController::class, 'restore'])
+            ->where('file', 'bms_db_[0-9]{8}_[0-9]{6}\\.dump')
+            ->middleware('throttle:2,30');
+        Route::get('/system/database-backups/{file}/download-link', [DatabaseBackupController::class, 'downloadLink'])
+            ->where('file', 'bms_db_[0-9]{8}_[0-9]{6}\\.dump');
     });
 
     // Bengkel: allows_service=false (admin konter → 403; owner lolos)
     Route::middleware('branch.type:bengkel')->group(function () {
         Route::get('/workshop-wages/settings', [WorkshopWageController::class, 'getSettings']);
         Route::put('/workshop-wages/settings', [WorkshopWageController::class, 'upsertSettings']);
+        Route::post('/workshop-wages/settings/copy-previous', [WorkshopWageController::class, 'copyPreviousSettings']);
         Route::get('/workshop-wages/jobs', [WorkshopWageController::class, 'jobs']);
         Route::post('/workshop-wages/jobs', [WorkshopWageController::class, 'storeJob']);
+        Route::post('/workshop-wages/jobs/batch', [WorkshopWageController::class, 'storeJobsBatch']);
         Route::put('/workshop-wages/jobs/{workshopJob}', [WorkshopWageController::class, 'updateJob']);
         Route::delete('/workshop-wages/jobs/{workshopJob}', [WorkshopWageController::class, 'destroyJob']);
         Route::get('/workshop-wages/weeks', [WorkshopWageController::class, 'weeks']);
@@ -182,13 +260,30 @@ Route::middleware(['auth:sanctum', 'admin.branch'])->group(function () {
         Route::post('/workshop-wages/weeks/reopen', [WorkshopWageController::class, 'reopenWeek'])->middleware('role:owner');
         Route::get('/workshop-wages/technicians', [WorkshopWageController::class, 'technicians']);
         Route::get('/workshop-wages/job-types', [WorkshopWageController::class, 'jobTypes']);
+        Route::post('/workshop-wages/job-types', [WorkshopWageController::class, 'storeJobType']);
+        Route::put('/workshop-wages/job-types/{workshopJobType}', [WorkshopWageController::class, 'updateJobType']);
+        Route::delete('/workshop-wages/job-types/{workshopJobType}', [WorkshopWageController::class, 'destroyJobType']);
     });
 
-    Route::get('/reports/{type}', [ReportController::class, 'show']);
-    Route::get('/reports/{type}/pdf-link', [ReportController::class, 'pdfLink']);
-    Route::get('/reports/{type}/pdf', [ReportController::class, 'pdf']);
+    // Detail transaksi per pos (laporan Alur Kas Bulanan) — Owner + Admin bengkel.
+    Route::get('/cashflow/monthly', [CashflowController::class, 'monthly']);
+    Route::get('/cashflow/matrix', [CashflowController::class, 'matrix']);
+    Route::get('/cashflow/category-transactions', [CashflowController::class, 'categoryTransactions']);
+
+    // Workbook Alur Kas (edit snapshot) — Owner only.
+    Route::middleware('role:owner')->group(function () {
+        Route::get('/cashflow/workbook', [CashflowWorkbookController::class, 'board']);
+        Route::put('/cashflow/workbook/save', [CashflowWorkbookController::class, 'save']);
+        Route::post('/cashflow/workbook/seed', [CashflowWorkbookController::class, 'seedFromSystem']);
+        Route::post('/cashflow/workbook/copy-previous', [CashflowWorkbookController::class, 'copyPrevious']);
+    });
 });
 
 Route::get('/reports/{type}/pdf-file', [ReportController::class, 'pdfFile'])
     ->name('api.reports.pdf-file')
+    ->middleware('signed');
+
+Route::get('/system/database-backups/file/{file}', [DatabaseBackupController::class, 'file'])
+    ->name('api.system.database-backups.file')
+    ->where('file', 'bms_db_[0-9]{8}_[0-9]{6}\\.dump')
     ->middleware('signed');

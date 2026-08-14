@@ -18,9 +18,12 @@
 /public/fonts-manifest.dev.json
 /public/hot
 /public/storage
-/storage/*.key
-/storage/pail
+/storage/app/backups/
+/storage/db-sync/
+/storage/tmp-*
 /vendor
+/desktop/build/
+/desktop/dist/
 _ide_helper.php
 Homestead.json
 Homestead.yaml

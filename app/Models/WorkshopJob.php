@@ -26,7 +26,7 @@ class WorkshopJob extends Model
     protected function casts(): array
     {
         return [
-            'job_date' => 'date',
+            'job_date' => 'date:Y-m-d',
             'amount' => 'decimal:2',
         ];
     }

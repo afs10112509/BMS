@@ -10,6 +10,7 @@ use App\Services\PayrollLockChecker;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ServiceRecordController extends Controller
 {
@@ -31,9 +32,17 @@ class ServiceRecordController extends Controller
             $branchId = (int) $user->branch_id;
         } elseif ($user->isOwner()) {
             $branchId = $request->filled('branch_id') ? $request->integer('branch_id') : null;
+            if ($branchId && $this->isWorkshopBranch($branchId)) {
+                return response()->json([
+                    'message' => 'Modul catatan servis hanya untuk cabang konter.',
+                    'data' => [],
+                ], 422);
+            }
         } else {
             return response()->json(['message' => 'Akses ditolak.'], 403);
         }
+
+        $konterIds = $this->konterBranchIds();
 
         $query = Employee::query()
             ->where('employees.status', 'active')
@@ -54,6 +63,8 @@ class ServiceRecordController extends Controller
 
         if ($branchId) {
             $query->where('employees.branch_id', $branchId);
+        } else {
+            $query->whereIn('employees.branch_id', $konterIds ?: [0]);
         }
 
         $rows = $query->get();
@@ -90,8 +101,18 @@ class ServiceRecordController extends Controller
                 ], 403);
             }
             $query->where('branch_id', $user->branch_id);
-        } elseif ($user->isOwner() && $request->filled('branch_id')) {
-            $query->where('branch_id', $request->integer('branch_id'));
+        } elseif ($user->isOwner()) {
+            if ($request->filled('branch_id')) {
+                $branchId = $request->integer('branch_id');
+                if ($this->isWorkshopBranch($branchId)) {
+                    return response()->json([
+                        'message' => 'Modul catatan servis hanya untuk cabang konter.',
+                    ], 422);
+                }
+                $query->where('branch_id', $branchId);
+            } else {
+                $query->whereIn('branch_id', $this->konterBranchIds() ?: [0]);
+            }
         }
 
         if ($request->filled('employee_id')) {
@@ -117,17 +138,21 @@ class ServiceRecordController extends Controller
             }
         }
 
-        $rows = $query->limit(200)->get();
+        // Ringkasan dari seluruh hasil filter (bukan hanya halaman aktif).
+        $summary = [
+            'jumlah' => (clone $query)->count(),
+            'total_modal' => (float) (clone $query)->sum('cost'),
+            'total_harga' => (float) (clone $query)->sum('price'),
+            'total_profit' => (float) (clone $query)->sum('profit'),
+        ];
+
+        $perPage = min(max($request->integer('per_page', 20), 1), 100);
+        $rows = $query->paginate($perPage);
 
         return response()->json([
             'message' => 'Daftar catatan servis berhasil diambil.',
             'data' => $rows,
-            'summary' => [
-                'jumlah' => $rows->count(),
-                'total_modal' => (float) $rows->sum('cost'),
-                'total_harga' => (float) $rows->sum('price'),
-                'total_profit' => (float) $rows->sum('profit'),
-            ],
+            'summary' => $summary,
         ]);
     }
 
@@ -194,6 +219,112 @@ class ServiceRecordController extends Controller
                 'employee:id,name,phone',
                 'user:id,name',
             ]),
+        ], 201);
+    }
+
+    public function storeBatch(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $blocked = $this->assertCanMutate($user);
+        if ($blocked) {
+            return $blocked;
+        }
+
+        $data = $request->validate([
+            'service_date' => ['required', 'date'],
+            'items' => ['required', 'array', 'min:1', 'max:100'],
+            'items.*.employee_id' => ['required', 'integer', 'exists:employees,id'],
+            'items.*.brand' => ['required', 'string', 'max:100'],
+            'items.*.device_type' => ['required', 'string', 'max:100'],
+            'items.*.damage' => ['required', 'string', 'max:150'],
+            'items.*.cost' => ['required', 'numeric', 'gte:0'],
+            'items.*.price' => ['required', 'numeric', 'gte:0'],
+            'items.*.notes' => ['nullable', 'string'],
+        ]);
+
+        $branchId = (int) $user->branch_id;
+
+        if ($this->isWorkshopBranch($branchId)) {
+            return response()->json([
+                'message' => 'Tipe cabang ini tidak dapat menginput catatan servis.',
+            ], 403);
+        }
+
+        $serviceDate = Carbon::parse($data['service_date'])->toDateString();
+        $employeeIds = collect($data['items'])->pluck('employee_id')->map(fn ($id) => (int) $id)->unique()->values()->all();
+
+        $employees = Employee::query()
+            ->whereIn('id', $employeeIds)
+            ->get()
+            ->keyBy('id');
+
+        foreach ($data['items'] as $index => $item) {
+            $row = $index + 1;
+            $employee = $employees->get((int) $item['employee_id']);
+            if (! $employee) {
+                return response()->json([
+                    'message' => "Teknisi tidak ditemukan (baris {$row}).",
+                ], 422);
+            }
+            if ((int) $employee->branch_id !== $branchId) {
+                return response()->json([
+                    'message' => "Teknisi harus dari cabang Anda (baris {$row}).",
+                ], 422);
+            }
+            if ($employee->status !== 'active') {
+                return response()->json([
+                    'message' => "Teknisi harus berstatus aktif (baris {$row}).",
+                ], 422);
+            }
+            if (! $employee->isTechnician()) {
+                return response()->json([
+                    'message' => "Karyawan harus memiliki jabatan Teknisi (baris {$row}).",
+                ], 422);
+            }
+        }
+
+        $this->payrollLockChecker->assertEmployeesDateOpen($employeeIds, $serviceDate);
+
+        $created = DB::transaction(function () use ($data, $branchId, $user, $serviceDate) {
+            $rows = [];
+            foreach ($data['items'] as $item) {
+                $cost = $item['cost'];
+                $price = $item['price'];
+                $record = ServiceRecord::query()->create([
+                    'branch_id' => $branchId,
+                    'employee_id' => (int) $item['employee_id'],
+                    'user_id' => $user->id,
+                    'service_date' => $serviceDate,
+                    'brand' => trim($item['brand']),
+                    'device_type' => trim($item['device_type']),
+                    'damage' => trim($item['damage']),
+                    'cost' => $cost,
+                    'price' => $price,
+                    'profit' => ServiceRecord::calcProfit($price, $cost),
+                    'notes' => $item['notes'] ?? null,
+                ]);
+                $rows[] = $record->load([
+                    'branch:id,name,type',
+                    'branch.branchType:id,code,name,allows_service,status',
+                    'employee:id,name,phone',
+                    'user:id,name',
+                ]);
+            }
+
+            return $rows;
+        });
+
+        return response()->json([
+            'message' => count($created).' catatan servis berhasil disimpan.',
+            'meta' => [
+                'branch_id' => $branchId,
+                'service_date' => $serviceDate,
+                'created_count' => count($created),
+                'total_cost' => round(collect($created)->sum(fn ($r) => (float) $r->cost), 2),
+                'total_price' => round(collect($created)->sum(fn ($r) => (float) $r->price), 2),
+                'total_profit' => round(collect($created)->sum(fn ($r) => (float) $r->profit), 2),
+            ],
+            'data' => $created,
         ], 201);
     }
 
@@ -334,5 +465,20 @@ class ServiceRecordController extends Controller
         $branch = Branch::query()->with('branchType')->find($branchId);
 
         return $branch ? $branch->isWorkshop() : false;
+    }
+
+    /**
+     * @return list<int>
+     */
+    protected function konterBranchIds(): array
+    {
+        return Branch::query()
+            ->with('branchType')
+            ->get()
+            ->filter(fn (Branch $b) => ! $b->isWorkshop())
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
     }
 }

@@ -19,7 +19,7 @@ class AccountOpeningBalance extends Model
     {
         return [
             'amount' => 'decimal:2',
-            'effective_date' => 'date',
+            'effective_date' => 'date:Y-m-d',
         ];
     }
 

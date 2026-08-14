@@ -38,15 +38,19 @@ class PayrollLocker
                 }
 
                 $auto = $autoByEmployee[$employee->id] ?? $this->calculator->emptyAuto($employee);
+                $isPic = (bool) ($auto['is_pic'] ?? $employee->hasPosition(Employee::POS_PIC));
                 $gapok = $existing !== null
                     ? (float) $existing->gapok
                     : (float) $auto['gapok'];
+                $insentifPic = $isPic ? (float) ($existing?->insentif_pic ?? 0) : 0.0;
                 $insentifAcc = (float) ($existing?->insentif_acc ?? 0);
                 $bonusAbsen = (float) ($existing?->bonus_absen ?? 0);
                 $hutang = (float) ($existing?->hutang ?? 0);
-                $pengeluaran = (float) ($existing?->pengeluaran ?? 0);
+                // Kasbon otomatis dari transaksi (semua cabang); hutang tetap manual.
+                $pengeluaran = (float) ($auto['kasbon'] ?? 0);
                 $total = Payroll::computeTotal(
                     $gapok,
+                    $insentifPic,
                     $auto['insentif_hp'],
                     $auto['service_incentive'],
                     $insentifAcc,
@@ -67,8 +71,10 @@ class PayrollLocker
                         'position_snapshot' => $employee->position,
                         'is_promotor' => $auto['is_promotor'],
                         'is_technician' => $auto['is_technician'],
+                        'is_pic' => $isPic,
                         'present_days' => $auto['present_days'],
                         'gapok' => $gapok,
+                        'insentif_pic' => $insentifPic,
                         'closing_qty' => $auto['closing_qty'],
                         'insentif_hp' => $auto['insentif_hp'],
                         'service_profit' => $auto['service_profit'],
@@ -106,16 +112,20 @@ class PayrollLocker
                 /** @var Employee $employee */
                 $employee = $employees->get($employeeId);
                 $auto = $autoByEmployee[$employeeId] ?? $this->calculator->emptyAuto($employee);
+                $isPic = (bool) ($auto['is_pic'] ?? $employee->hasPosition(Employee::POS_PIC));
 
                 $gapok = array_key_exists('gapok', $item)
                     ? (float) $item['gapok']
                     : (float) $auto['gapok'];
+                $insentifPic = $isPic ? (float) ($item['insentif_pic'] ?? 0) : 0.0;
                 $insentifAcc = (float) ($item['insentif_acc'] ?? 0);
                 $bonusAbsen = (float) ($item['bonus_absen'] ?? 0);
                 $hutang = (float) ($item['hutang'] ?? 0);
-                $pengeluaran = (float) ($item['pengeluaran'] ?? 0);
+                // Abaikan input manual pengeluaran — selalu dari total kasbon transaksi.
+                $pengeluaran = (float) ($auto['kasbon'] ?? 0);
                 $total = Payroll::computeTotal(
                     $gapok,
+                    $insentifPic,
                     $auto['insentif_hp'],
                     $auto['service_incentive'],
                     $insentifAcc,
@@ -136,8 +146,10 @@ class PayrollLocker
                         'position_snapshot' => $employee->position,
                         'is_promotor' => $auto['is_promotor'],
                         'is_technician' => $auto['is_technician'],
+                        'is_pic' => $isPic,
                         'present_days' => $auto['present_days'],
                         'gapok' => $gapok,
+                        'insentif_pic' => $insentifPic,
                         'closing_qty' => $auto['closing_qty'],
                         'insentif_hp' => $auto['insentif_hp'],
                         'service_profit' => $auto['service_profit'],

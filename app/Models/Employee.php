@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
     'branch_id',
@@ -55,7 +56,7 @@ class Employee extends Model
     protected function casts(): array
     {
         return [
-            'joined_at' => 'date',
+            'joined_at' => 'date:Y-m-d',
             'positions' => 'array',
         ];
     }
@@ -149,7 +150,7 @@ class Employee extends Model
     }
 
     /**
-     * Karyawan non-manajemen (bukan Owner/PIC) — dipakai closing, absensi board, dll.
+     * Karyawan non-manajemen (bukan Owner/PIC) — dipakai ringkasan tertentu yang memang mengecualikan PIC.
      */
     public function scopeWithoutManagement(Builder $query): Builder
     {
@@ -159,6 +160,18 @@ class Employee extends Model
                     $inner->whereJsonDoesntContain('positions', self::POS_OWNER)
                         ->whereJsonDoesntContain('positions', self::POS_PIC);
                 });
+        });
+    }
+
+    /**
+     * Sembunyikan jabatan Owner saja (PIC tetap tampil).
+     * Dipakai: absensi, target closingan, upah bengkel.
+     */
+    public function scopeWithoutOwner(Builder $query): Builder
+    {
+        return $query->where(function (Builder $q) {
+            $q->whereNull('positions')
+                ->orWhereJsonDoesntContain('positions', self::POS_OWNER);
         });
     }
 
@@ -192,6 +205,11 @@ class Employee extends Model
     public function attendances(): HasMany
     {
         return $this->hasMany(EmployeeAttendance::class);
+    }
+
+    public function userAccount(): HasOne
+    {
+        return $this->hasOne(User::class, 'employee_id');
     }
 
     public function payrolls(): HasMany

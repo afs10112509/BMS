@@ -20,6 +20,77 @@ class ReconciliationController extends Controller
         protected BranchContext $branchContext,
     ) {}
 
+    public function index(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $data = $request->validate([
+            'with_difference' => ['nullable', 'boolean'],
+            'branch_id' => ['nullable', 'integer', 'exists:branches,id'],
+            'days' => ['nullable', 'integer', 'min:1', 'max:365'],
+            'limit' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        $days = (int) ($data['days'] ?? 60);
+        $limit = (int) ($data['limit'] ?? 30);
+        $withDifference = $request->boolean('with_difference', false);
+
+        $query = Reconciliation::query()
+            ->with([
+                'branch:id,name',
+                'account:id,name,code',
+                'user:id,name',
+                'adjustedBy:id,name',
+            ])
+            ->whereDate('reconciliation_date', '>=', now()->subDays($days)->toDateString())
+            ->orderByRaw('CASE WHEN adjusted_at IS NULL THEN 0 ELSE 1 END')
+            ->orderByDesc('reconciliation_date')
+            ->orderByDesc('id');
+
+        if ($user->isOwner() && ! empty($data['branch_id'])) {
+            $query->where('branch_id', (int) $data['branch_id']);
+        }
+
+        if ($withDifference) {
+            $query->whereRaw('ABS(difference) > 0.009');
+        }
+
+        $rows = $query->limit($limit)->get()->map(fn (Reconciliation $r) => [
+            'id' => $r->id,
+            'branch_id' => (int) $r->branch_id,
+            'account_id' => (int) $r->account_id,
+            'branch' => $r->branch ? ['id' => $r->branch->id, 'name' => $r->branch->name] : null,
+            'account' => $r->account ? [
+                'id' => $r->account->id,
+                'name' => $r->account->name,
+                'code' => $r->account->code,
+            ] : null,
+            'user' => $r->user ? ['id' => $r->user->id, 'name' => $r->user->name] : null,
+            'system_balance' => (float) $r->system_balance,
+            'physical_balance' => (float) $r->physical_balance,
+            'difference' => (float) $r->difference,
+            'reconciliation_date' => $r->reconciliation_date?->toDateString(),
+            'is_adjusted' => $r->isAdjusted(),
+            'adjusted_at' => $r->adjusted_at?->toIso8601String(),
+            'adjusted_by' => $r->adjustedBy ? [
+                'id' => $r->adjustedBy->id,
+                'name' => $r->adjustedBy->name,
+            ] : null,
+            'adjustment_transaction_id' => $r->adjustment_transaction_id,
+        ]);
+
+        return response()->json([
+            'message' => 'Daftar rekonsiliasi berhasil diambil.',
+            'data' => $rows,
+            'meta' => [
+                'days' => $days,
+                'limit' => $limit,
+                'with_difference' => $withDifference,
+                'jumlah' => $rows->count(),
+            ],
+        ]);
+    }
+
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -67,6 +138,10 @@ class ReconciliationController extends Controller
                 'system_balance' => $systemBalance,
                 'physical_balance' => $data['physical_balance'],
                 'difference' => number_format($difference, 2, '.', ''),
+                // Cek ulang membuka status penyesuaian lama (boleh dikoreksi lagi jika masih selisih).
+                'adjusted_at' => null,
+                'adjusted_by' => null,
+                'adjustment_transaction_id' => null,
             ]
         );
 

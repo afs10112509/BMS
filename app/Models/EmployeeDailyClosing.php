@@ -12,7 +12,7 @@ class EmployeeDailyClosing extends Model
     protected function casts(): array
     {
         return [
-            'closing_date' => 'date',
+            'closing_date' => 'date:Y-m-d',
             'qty' => 'integer',
         ];
     }

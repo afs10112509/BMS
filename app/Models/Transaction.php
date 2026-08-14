@@ -28,7 +28,8 @@ class Transaction extends Model
     {
         return [
             'amount' => 'decimal:2',
-            'transaction_date' => 'date',
+            // Y-m-d wajib: serialize ISO-UTC menggeser tanggal kalender saat APP_TIMEZONE ≠ UTC
+            'transaction_date' => 'date:Y-m-d',
         ];
     }
 

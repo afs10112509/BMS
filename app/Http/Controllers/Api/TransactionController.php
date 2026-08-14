@@ -9,6 +9,7 @@ use App\Services\BranchContext;
 use App\Services\PeriodLockChecker;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class TransactionController extends Controller
 {
@@ -141,6 +142,86 @@ class TransactionController extends Controller
         return response()->json([
             'message' => 'Transaksi berhasil dicatat.',
             'data' => $transaction->load(['category', 'branch.branchType', 'account', 'user:id,name', 'updatedBy:id,name']),
+        ], 201);
+    }
+
+    public function storeBatch(Request $request): JsonResponse
+    {
+        $this->authorize('create', Transaction::class);
+
+        $user = $request->user();
+
+        $data = $request->validate([
+            'branch_id' => ['nullable', 'integer', 'exists:branches,id'],
+            'transaction_date' => ['required', 'date'],
+            'items' => ['required', 'array', 'min:1', 'max:100'],
+            'items.*.category_id' => ['required', 'integer', 'exists:categories,id'],
+            'items.*.account_id' => ['required', 'integer', 'exists:accounts,id'],
+            'items.*.amount' => ['required', 'numeric', 'gt:0'],
+            'items.*.description' => ['nullable', 'string'],
+        ]);
+
+        $branchId = $user->isOwner()
+            ? ($data['branch_id'] ?? null)
+            : $user->branch_id;
+
+        if (! $branchId) {
+            return response()->json([
+                'message' => 'Cabang wajib dipilih.',
+            ], 422);
+        }
+
+        if ($deny = $this->branchContext->denyUnlessOwnsBranch($user, (int) $branchId)) {
+            return $deny;
+        }
+
+        $this->periodLockChecker->assertPeriodOpen((int) $branchId, $data['transaction_date']);
+
+        $accountAvailability = app(\App\Services\AccountAvailability::class);
+        $categoryAvailability = app(\App\Services\CategoryAvailability::class);
+
+        foreach ($data['items'] as $index => $item) {
+            $row = $index + 1;
+            if (! $accountAvailability->isAllowed((int) $branchId, (int) $item['account_id'])) {
+                return response()->json([
+                    'message' => "Akun tidak tersedia untuk cabang ini (baris {$row}).",
+                ], 422);
+            }
+            if (! $categoryAvailability->isAllowed((int) $branchId, (int) $item['category_id'])) {
+                return response()->json([
+                    'message' => "Kategori tidak tersedia untuk cabang ini (baris {$row}).",
+                ], 422);
+            }
+        }
+
+        $created = DB::transaction(function () use ($data, $branchId, $user) {
+            $rows = [];
+            foreach ($data['items'] as $item) {
+                $transaction = Transaction::query()->create([
+                    'branch_id' => $branchId,
+                    'user_id' => $user->id,
+                    'category_id' => (int) $item['category_id'],
+                    'account_id' => (int) $item['account_id'],
+                    'amount' => \App\Support\Money::of($item['amount']),
+                    'description' => $item['description'] ?? null,
+                    'transaction_date' => $data['transaction_date'],
+                ]);
+                $this->auditLogger->log($user, 'CREATE', $transaction, null, $transaction->toArray());
+                $rows[] = $transaction->load(['category', 'branch.branchType', 'account', 'user:id,name', 'updatedBy:id,name']);
+            }
+
+            return $rows;
+        });
+
+        return response()->json([
+            'message' => count($created).' transaksi berhasil dicatat.',
+            'meta' => [
+                'branch_id' => (int) $branchId,
+                'transaction_date' => $data['transaction_date'],
+                'created_count' => count($created),
+                'total_amount' => round(collect($created)->sum(fn ($t) => (float) $t->amount), 2),
+            ],
+            'data' => $created,
         ], 201);
     }
 

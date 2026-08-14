@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Employee;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 
 class EmployeeController extends Controller
@@ -15,7 +17,11 @@ class EmployeeController extends Controller
         $user = $request->user();
 
         $query = Employee::query()
-            ->with(['branch:id,name,type', 'branch.branchType:id,code,name,allows_service,status'])
+            ->with([
+                'branch:id,name,type',
+                'branch.branchType:id,code,name,allows_service,status',
+                'userAccount:id,employee_id,email,role',
+            ])
             ->join('branches', 'branches.id', '=', 'employees.branch_id')
             ->orderBy('branches.name')
             ->orderBy('employees.name')
@@ -130,6 +136,66 @@ class EmployeeController extends Controller
 
         return response()->json([
             'message' => 'Karyawan berhasil dihapus.',
+        ]);
+    }
+
+    /** Buat / perbarui akun login karyawan (Owner). */
+    public function upsertAccount(Request $request, Employee $employee): JsonResponse
+    {
+        if (! $request->user()->isOwner()) {
+            return response()->json(['message' => 'Hanya Owner yang dapat membuat akun karyawan.'], 403);
+        }
+        if (! $employee->isActive()) {
+            return response()->json(['message' => 'Karyawan nonaktif tidak dapat diberi akun login.'], 422);
+        }
+
+        $employee->load('userAccount');
+        $data = $request->validate([
+            'email' => [
+                'required',
+                'email',
+                'max:255',
+                Rule::unique('users', 'email')->ignore($employee->userAccount?->id),
+            ],
+            'password' => ['nullable', 'string', 'min:6'],
+            'name' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $account = $employee->userAccount;
+        if (! $account && empty($data['password'])) {
+            return response()->json(['message' => 'Kata sandi wajib diisi untuk akun baru.'], 422);
+        }
+
+        if ($account) {
+            $account->email = $data['email'];
+            $account->name = $data['name'] ?? $employee->name;
+            $account->branch_id = $employee->branch_id;
+            $account->role = 'employee';
+            if (! empty($data['password'])) {
+                $account->password = $data['password'];
+            }
+            $account->save();
+            $message = 'Akun login karyawan diperbarui.';
+        } else {
+            $account = User::query()->create([
+                'name' => $data['name'] ?? $employee->name,
+                'email' => $data['email'],
+                'password' => $data['password'],
+                'role' => 'employee',
+                'branch_id' => $employee->branch_id,
+                'employee_id' => $employee->id,
+            ]);
+            $message = 'Akun login karyawan dibuat.';
+        }
+
+        return response()->json([
+            'message' => $message,
+            'data' => [
+                'employee_id' => $employee->id,
+                'user_id' => $account->id,
+                'email' => $account->email,
+                'has_login' => true,
+            ],
         ]);
     }
 }

@@ -27,8 +27,10 @@ return new class extends Migration
             ]);
         }
 
-        DB::statement("ALTER TABLE employees ALTER COLUMN positions SET DEFAULT '[]'::jsonb");
-        DB::statement('ALTER TABLE employees ALTER COLUMN positions SET NOT NULL');
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement("ALTER TABLE employees ALTER COLUMN positions SET DEFAULT '[]'::jsonb");
+            DB::statement('ALTER TABLE employees ALTER COLUMN positions SET NOT NULL');
+        }
     }
 
     public function down(): void

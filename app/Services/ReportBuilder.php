@@ -11,6 +11,12 @@ use App\Models\EmployeeDailyClosing;
 use App\Models\EmployeeMonthlyTarget;
 use App\Models\InterBranchTransfer;
 use App\Models\Payroll;
+use App\Models\CashflowWorkbook;
+use App\Models\CashflowWorkbookLine;
+use App\Models\ProfitShare;
+use App\Models\ProfitShareLine;
+use App\Models\BrilinkDailySheet;
+use App\Models\PulsaDailySheet;
 use App\Models\Reconciliation;
 use App\Models\ServiceRecord;
 use App\Models\Transaction;
@@ -41,6 +47,14 @@ class ReportBuilder
         $branchId = null;
         if ($user->isAdmin()) {
             $branchId = (int) $user->branch_id;
+        } elseif ($user->isEmployee()) {
+            // Karyawan (PIC) hanya cabangnya sendiri.
+            $branchId = $user->employeeBranchId();
+            if (! $branchId) {
+                throw ValidationException::withMessages([
+                    'branch_id' => 'Akun karyawan tidak terhubung ke cabang.',
+                ]);
+            }
         } elseif (! empty($input['branch_id'])) {
             $branchId = (int) $input['branch_id'];
         }
@@ -57,6 +71,7 @@ class ReportBuilder
             'type' => $type ?: null,
             'category_id' => ! empty($input['category_id']) ? (int) $input['category_id'] : null,
             'account_id' => ! empty($input['account_id']) ? (int) $input['account_id'] : null,
+            'employee_id' => ! empty($input['employee_id']) ? (int) $input['employee_id'] : null,
             'q' => isset($input['q']) ? trim((string) $input['q']) : null,
         ];
     }
@@ -85,6 +100,11 @@ class ReportBuilder
             $akunLabel = Account::query()->where('id', $filters['account_id'])->value('name') ?: '-';
         }
 
+        $teknisiLabel = 'Semua teknisi';
+        if (! empty($filters['employee_id'])) {
+            $teknisiLabel = Employee::query()->where('id', $filters['employee_id'])->value('name') ?: '-';
+        }
+
         return [
             'jenis' => $reportType,
             'judul' => $this->title($reportType),
@@ -94,6 +114,7 @@ class ReportBuilder
             'tipe' => $tipeLabel,
             'kategori' => $kategoriLabel,
             'akun' => $akunLabel,
+            'teknisi' => $teknisiLabel,
             'pencarian' => ! empty($filters['q']) ? $filters['q'] : '-',
             'dibuat_oleh' => $user->name,
             'dibuat_pada' => now()->timezone(config('app.timezone'))->format('d/m/Y H:i'),
@@ -121,8 +142,12 @@ class ReportBuilder
             'absensi' => 'Laporan Absensi',
             'gaji' => 'Laporan Gaji Konter',
             'upah' => 'Laporan Upah Kerja Bengkel',
-            'closing' => 'Laporan Target Closingan',
+            'bagi-hasil' => 'Laporan Bagi Hasil',
+            'closing' => 'Laporan Closing Harian & Target',
             'rekonsiliasi' => 'Laporan Rekonsiliasi',
+            'alur-kas' => 'Laporan Alur Kas',
+            'keuntungan-pulsa' => 'Laporan Keuntungan Pulsa',
+            'brilink' => 'Laporan Brilink',
             default => 'Laporan',
         };
     }
@@ -139,8 +164,12 @@ class ReportBuilder
             'absensi' => $this->absensi($filters),
             'gaji' => $this->gaji($filters),
             'upah' => $this->upah($filters),
+            'bagi-hasil' => $this->bagiHasil($filters),
             'closing' => $this->closing($filters),
             'rekonsiliasi' => $this->rekonsiliasi($filters),
+            'alur-kas' => $this->alurKas($filters),
+            'keuntungan-pulsa' => $this->keuntunganPulsa($filters),
+            'brilink' => $this->brilink($filters),
             default => throw ValidationException::withMessages([
                 'type' => 'Jenis laporan tidak dikenal.',
             ]),
@@ -157,22 +186,25 @@ class ReportBuilder
         $expenseCount = (clone $base)->where('categories.type', 'expense')->count();
 
         $byDay = (clone $base)
-            ->selectRaw('transactions.transaction_date, categories.type, SUM(transactions.amount) as total')
-            ->groupBy('transactions.transaction_date', 'categories.type')
-            ->orderBy('transactions.transaction_date')
+            ->selectRaw('DATE(transactions.transaction_date) as day, categories.type, SUM(transactions.amount) as total')
+            ->groupByRaw('DATE(transactions.transaction_date), categories.type')
+            ->orderByDesc('day')
             ->get()
-            ->groupBy(fn ($r) => (string) $r->transaction_date)
+            ->groupBy(fn ($r) => (string) $r->day)
             ->map(function (Collection $rows, $date) {
                 $income = (float) ($rows->firstWhere('type', 'income')->total ?? 0);
                 $expense = (float) ($rows->firstWhere('type', 'expense')->total ?? 0);
+                $day = substr((string) $date, 0, 10);
 
                 return [
-                    'tanggal' => $date,
+                    'tanggal' => $day,
                     'pemasukan' => $income,
                     'pengeluaran' => $expense,
                     'selisih' => $income - $expense,
                 ];
             })
+            // Terbaru di atas (groupBy bisa mengacak urutan di beberapa driver).
+            ->sortByDesc('tanggal')
             ->values()
             ->all();
 
@@ -190,25 +222,176 @@ class ReportBuilder
 
     public function kategori(array $filters): array
     {
-        $rows = $this->transactionQuery($filters)
-            ->selectRaw('categories.id, categories.name, categories.type, COUNT(*) as jumlah, SUM(transactions.amount) as total')
-            ->groupBy('categories.id', 'categories.name', 'categories.type')
+        $ids = $this->transactionQuery($filters)
             ->orderBy('categories.type')
             ->orderBy('categories.name')
+            ->orderByDesc('transactions.transaction_date')
+            ->orderByDesc('transactions.id')
+            ->pluck('transactions.id');
+
+        $transactions = Transaction::query()
+            ->with(['category', 'branch.branchType', 'account', 'user:id,name'])
+            ->whereIn('id', $ids)
+            ->orderByDesc('transaction_date')
+            ->orderByDesc('id')
             ->get()
-            ->map(fn ($r) => [
-                'category_id' => $r->id,
-                'nama' => $r->name,
-                'tipe' => $r->type,
-                'jumlah' => (int) $r->jumlah,
-                'total' => (float) $r->total,
-            ])
-            ->all();
+            ->sortBy(function (Transaction $t) {
+                $typeOrder = $t->category?->type === 'income' ? 0 : 1;
+                // Kategori tetap dikelompokkan; di dalam grup tanggal terbaru dulu.
+                $dateKey = 99999999 - (int) str_replace('-', '', substr((string) $t->transaction_date, 0, 10));
+
+                return sprintf(
+                    '%d|%s|%08d|%010d',
+                    $typeOrder,
+                    mb_strtolower((string) $t->category?->name),
+                    $dateKey,
+                    2_000_000_000 - (int) $t->id
+                );
+            })
+            ->values();
+
+        $groups = [];
+        foreach ($transactions as $t) {
+            $catId = (int) $t->category_id;
+            if (! isset($groups[$catId])) {
+                $groups[$catId] = [
+                    'category_id' => $catId,
+                    'nama' => $t->category?->name,
+                    'tipe' => $t->category?->type,
+                    'jumlah' => 0,
+                    'total' => 0.0,
+                    'rows' => [],
+                ];
+            }
+            $groups[$catId]['rows'][] = [
+                'id' => $t->id,
+                'tanggal' => (string) $t->transaction_date,
+                'cabang' => $t->branch?->name,
+                'akun' => $t->account?->name,
+                'nominal' => (float) $t->amount,
+                'keterangan' => $t->description,
+                'input_oleh' => $t->user?->name,
+            ];
+            $groups[$catId]['jumlah']++;
+            $groups[$catId]['total'] += (float) $t->amount;
+        }
+
+        $groupList = array_values($groups);
+        $summaryRows = array_map(static fn (array $g) => [
+            'category_id' => $g['category_id'],
+            'nama' => $g['nama'],
+            'tipe' => $g['tipe'],
+            'jumlah' => $g['jumlah'],
+            'total' => $g['total'],
+        ], $groupList);
 
         return [
-            'rows' => $rows,
-            'total_pemasukan' => collect($rows)->where('tipe', 'income')->sum('total'),
-            'total_pengeluaran' => collect($rows)->where('tipe', 'expense')->sum('total'),
+            'groups' => $groupList,
+            'rows' => $summaryRows,
+            'jumlah' => $transactions->count(),
+            'total_pemasukan' => collect($groupList)->where('tipe', 'income')->sum('total'),
+            'total_pengeluaran' => collect($groupList)->where('tipe', 'expense')->sum('total'),
+        ];
+    }
+
+    public function alurKas(array $filters): array
+    {
+        $from = Carbon::parse($filters['date_from']);
+        $to = Carbon::parse($filters['date_to']);
+
+        // Satu bulan + ada snapshot tersimpan → pakai workbook (termasuk edit manual & bagian toko).
+        if ($from->format('Y-m') === $to->format('Y-m')) {
+            $year = (int) $from->year;
+            $month = (int) $from->month;
+            $workbooks = CashflowWorkbook::query()
+                ->with('lines')
+                ->where('year', $year)
+                ->where('month', $month)
+                ->when($filters['branch_id'], fn ($q) => $q->where('branch_id', $filters['branch_id']))
+                ->get();
+
+            if ($workbooks->isNotEmpty()) {
+                $incomeMap = [];
+                $expenseMap = [];
+                foreach ($workbooks as $wb) {
+                    foreach ($wb->lines as $line) {
+                        $key = mb_strtolower(trim((string) $line->name));
+                        if (($line->type ?? '') === CashflowWorkbookLine::TYPE_INCOME) {
+                            if (! isset($incomeMap[$key])) {
+                                $incomeMap[$key] = [
+                                    'category_id' => $line->category_id ? (int) $line->category_id : 0,
+                                    'nama' => $line->name,
+                                    'jumlah' => 0,
+                                    'total' => 0.0,
+                                ];
+                            }
+                            $incomeMap[$key]['total'] += (float) $line->amount;
+                            $incomeMap[$key]['jumlah']++;
+                        } else {
+                            if (! isset($expenseMap[$key])) {
+                                $expenseMap[$key] = [
+                                    'category_id' => $line->category_id ? (int) $line->category_id : 0,
+                                    'nama' => $line->name,
+                                    'jumlah' => 0,
+                                    'total' => 0.0,
+                                ];
+                            }
+                            $expenseMap[$key]['total'] += (float) $line->amount;
+                            $expenseMap[$key]['jumlah']++;
+                        }
+                    }
+                }
+
+                $pemasukan = array_values(array_map(function (array $r) {
+                    $r['total'] = round($r['total'], 2);
+
+                    return $r;
+                }, $incomeMap));
+                $pengeluaran = array_values(array_map(function (array $r) {
+                    $r['total'] = round($r['total'], 2);
+
+                    return $r;
+                }, $expenseMap));
+                $totalIn = (float) collect($pemasukan)->sum('total');
+                $totalOut = (float) collect($pengeluaran)->sum('total');
+
+                return [
+                    'has_data' => ($totalIn + $totalOut) > 0 || count($pemasukan) + count($pengeluaran) > 0,
+                    'tx_count' => 0,
+                    'source' => 'workbook',
+                    'pemasukan' => $pemasukan,
+                    'pengeluaran' => $pengeluaran,
+                    'total_pemasukan' => $totalIn,
+                    'total_pengeluaran' => $totalOut,
+                    'selisih' => round($totalIn - $totalOut, 2),
+                ];
+            }
+        }
+
+        $calculator = app(BranchBalanceCalculator::class);
+        $totals = $calculator->totalsByCategory(
+            $filters['branch_id'],
+            $filters['date_from'],
+            $filters['date_to'],
+        );
+
+        $txCount = Transaction::query()
+            ->join('categories', 'categories.id', '=', 'transactions.category_id')
+            ->where('categories.name', 'not like', 'Transfer%')
+            ->whereDate('transactions.transaction_date', '>=', $filters['date_from'])
+            ->whereDate('transactions.transaction_date', '<=', $filters['date_to'])
+            ->when($filters['branch_id'], fn ($q) => $q->where('transactions.branch_id', $filters['branch_id']))
+            ->count();
+
+        return [
+            'has_data' => $txCount > 0,
+            'tx_count' => $txCount,
+            'source' => 'transactions',
+            'pemasukan' => $totals['pemasukan'],
+            'pengeluaran' => $totals['pengeluaran'],
+            'total_pemasukan' => $totals['total_pemasukan'],
+            'total_pengeluaran' => $totals['total_pengeluaran'],
+            'selisih' => $totals['selisih'],
         ];
     }
 
@@ -261,15 +444,15 @@ class ReportBuilder
     public function transaksi(array $filters): array
     {
         $ids = $this->transactionQuery($filters)
-            ->orderBy('transactions.transaction_date')
-            ->orderBy('transactions.id')
+            ->orderByDesc('transactions.transaction_date')
+            ->orderByDesc('transactions.id')
             ->pluck('transactions.id');
 
         $rows = Transaction::query()
             ->with(['category', 'branch.branchType', 'account', 'user:id,name'])
             ->whereIn('id', $ids)
-            ->orderBy('transaction_date')
-            ->orderBy('id')
+            ->orderByDesc('transaction_date')
+            ->orderByDesc('id')
             ->get()
             ->map(fn (Transaction $t) => [
                 'id' => $t->id,
@@ -308,7 +491,8 @@ class ReportBuilder
             ])
             ->whereDate('created_at', '>=', $filters['date_from'])
             ->whereDate('created_at', '<=', $filters['date_to'])
-            ->latest('id');
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
 
         if ($filters['branch_id']) {
             $branchId = $filters['branch_id'];
@@ -350,8 +534,8 @@ class ReportBuilder
             ->with(['branch:id,name', 'employee:id,name'])
             ->whereDate('service_date', '>=', $filters['date_from'])
             ->whereDate('service_date', '<=', $filters['date_to'])
-            ->orderBy('service_date')
-            ->orderBy('id');
+            ->orderByDesc('service_date')
+            ->orderByDesc('id');
 
         if ($filters['branch_id']) {
             $query->where('branch_id', $filters['branch_id']);
@@ -430,6 +614,7 @@ class ReportBuilder
             ->with(['employee:id,name,position', 'branch:id,name'])
             ->where('year', $year)
             ->where('month', $month)
+            ->whereHas('branch.branchType', fn ($q) => $q->where('allows_service', true))
             ->orderBy('branch_id')
             ->orderBy('employee_id');
 
@@ -445,6 +630,7 @@ class ReportBuilder
             'status' => $p->status,
             'hadir' => (int) $p->present_days,
             'gapok' => (float) $p->gapok,
+            'insentif_pic' => (float) ($p->insentif_pic ?? 0),
             'closing' => (int) $p->closing_qty,
             'insentif_hp' => (float) $p->insentif_hp,
             'insentif_service' => (float) $p->service_incentive,
@@ -455,15 +641,109 @@ class ReportBuilder
             'total' => (float) $p->total,
         ])->all();
 
+        $collection = collect($rows);
+
         return [
             'year' => $year,
             'month' => $month,
             'periode_label' => $from->locale('id')->translatedFormat('F Y'),
             'rows' => $rows,
+            'jumlah' => $collection->count(),
+            'total_hadir' => (int) $collection->sum('hadir'),
+            'total_gapok' => (float) $collection->sum('gapok'),
+            'total_insentif_pic' => (float) $collection->sum('insentif_pic'),
+            'total_insentif_hp' => (float) $collection->sum('insentif_hp'),
+            'total_insentif_service' => (float) $collection->sum('insentif_service'),
+            'total_acc' => (float) $collection->sum('acc'),
+            'total_bonus' => (float) $collection->sum('bonus'),
+            'total_hutang' => (float) $collection->sum('hutang'),
+            'total_pengeluaran' => (float) $collection->sum('pengeluaran'),
+            'total_gaji' => (float) $collection->sum('total'),
+            'draft' => $collection->where('status', Payroll::STATUS_DRAFT)->count(),
+            'locked' => $collection->where('status', Payroll::STATUS_LOCKED)->count(),
+        ];
+    }
+
+    public function bagiHasil(array $filters): array
+    {
+        $from = Carbon::parse($filters['date_from'])->startOfMonth();
+        $to = Carbon::parse($filters['date_to'])->startOfMonth();
+        if ($to->lt($from)) {
+            $to = $from->copy();
+        }
+
+        $fromKey = ((int) $from->year * 100) + (int) $from->month;
+        $toKey = ((int) $to->year * 100) + (int) $to->month;
+
+        $query = ProfitShare::query()
+            ->with(['branch:id,name,type', 'lines'])
+            ->whereRaw('(year * 100 + month) >= ?', [$fromKey])
+            ->whereRaw('(year * 100 + month) <= ?', [$toKey])
+            ->orderByDesc('year')
+            ->orderByDesc('month')
+            ->orderBy('branch_id');
+
+        if ($filters['branch_id']) {
+            $query->where('branch_id', $filters['branch_id']);
+        }
+
+        $shares = $query->get();
+
+        $rows = $shares->map(function (ProfitShare $share) {
+            $periode = Carbon::create((int) $share->year, (int) $share->month, 1)
+                ->locale('id')
+                ->translatedFormat('F Y');
+
+            $incomeLines = $share->lines
+                ->where('type', ProfitShareLine::TYPE_INCOME)
+                ->values()
+                ->map(fn (ProfitShareLine $l) => [
+                    'name' => $l->name,
+                    'amount' => (float) $l->amount,
+                ])->all();
+
+            $expenseLines = $share->lines
+                ->where('type', ProfitShareLine::TYPE_EXPENSE)
+                ->values()
+                ->map(fn (ProfitShareLine $l) => [
+                    'name' => $l->name,
+                    'amount' => (float) $l->amount,
+                ])->all();
+
+            return [
+                'id' => $share->id,
+                'branch_id' => (int) $share->branch_id,
+                'cabang' => $share->branch?->name,
+                'year' => (int) $share->year,
+                'month' => (int) $share->month,
+                'periode_label' => $periode,
+                'status' => $share->status,
+                'pic_name' => $share->pic_name,
+                'pic_share_pct' => (float) $share->pic_share_pct,
+                'total_income' => (float) $share->total_income,
+                'total_expense' => (float) $share->total_expense,
+                'net_profit' => (float) $share->net_profit,
+                'pic_amount' => (float) $share->pic_amount,
+                'note' => $share->note,
+                'income_lines' => $incomeLines,
+                'expense_lines' => $expenseLines,
+            ];
+        })->all();
+
+        $periodeLabel = $from->format('Y-m') === $to->format('Y-m')
+            ? $from->copy()->locale('id')->translatedFormat('F Y')
+            : $from->copy()->locale('id')->translatedFormat('F Y').' – '.$to->copy()->locale('id')->translatedFormat('F Y');
+
+        return [
+            'periode_label' => $periodeLabel,
+            'rows' => $rows,
             'jumlah' => count($rows),
-            'total_gaji' => collect($rows)->sum('total'),
-            'draft' => collect($rows)->where('status', Payroll::STATUS_DRAFT)->count(),
-            'locked' => collect($rows)->where('status', Payroll::STATUS_LOCKED)->count(),
+            'total_income' => (float) collect($rows)->sum('total_income'),
+            'total_expense' => (float) collect($rows)->sum('total_expense'),
+            'total_net_profit' => (float) collect($rows)->sum('net_profit'),
+            'total_pic_amount' => (float) collect($rows)->sum('pic_amount'),
+            'draft' => collect($rows)->where('status', ProfitShare::STATUS_DRAFT)->count(),
+            'locked' => collect($rows)->where('status', ProfitShare::STATUS_LOCKED)->count(),
         ];
     }
 
@@ -473,8 +753,8 @@ class ReportBuilder
             ->with(['employee:id,name', 'branch:id,name'])
             ->whereDate('job_date', '>=', $filters['date_from'])
             ->whereDate('job_date', '<=', $filters['date_to'])
-            ->orderBy('job_date')
-            ->orderBy('id');
+            ->orderByDesc('job_date')
+            ->orderByDesc('id');
 
         if ($filters['branch_id']) {
             $query->where('branch_id', $filters['branch_id']);
@@ -487,13 +767,26 @@ class ReportBuilder
             $query->whereIn('branch_id', $workshopIds);
         }
 
-        $jobs = $query->get();
-        $year = (int) Carbon::parse($filters['date_from'])->year;
-        $month = (int) Carbon::parse($filters['date_from'])->month;
+        if (! empty($filters['employee_id'])) {
+            $query->where('employee_id', (int) $filters['employee_id']);
+        }
 
-        $pctByBranch = [];
-        foreach ($jobs->pluck('branch_id')->unique() as $bid) {
-            $pctByBranch[(int) $bid] = WorkshopWageSetting::query()
+        $jobs = $query->get();
+
+        /** @var array<string, array<int, float>> $pctMaps key: branchId-year-month */
+        $pctMaps = [];
+        foreach ($jobs as $j) {
+            if (! $j->job_date) {
+                continue;
+            }
+            $bid = (int) $j->branch_id;
+            $year = (int) $j->job_date->year;
+            $month = (int) $j->job_date->month;
+            $key = "{$bid}-{$year}-{$month}";
+            if (isset($pctMaps[$key])) {
+                continue;
+            }
+            $pctMaps[$key] = WorkshopWageSetting::query()
                 ->where('branch_id', $bid)
                 ->where('year', $year)
                 ->where('month', $month)
@@ -502,14 +795,18 @@ class ReportBuilder
                 ->all();
         }
 
-        $rows = $jobs->map(function (WorkshopJob $j) use ($pctByBranch) {
-            $map = $pctByBranch[(int) $j->branch_id] ?? [];
+        $rows = $jobs->map(function (WorkshopJob $j) use ($pctMaps) {
+            $year = (int) ($j->job_date?->year ?? 0);
+            $month = (int) ($j->job_date?->month ?? 0);
+            $key = ((int) $j->branch_id).'-'.$year.'-'.$month;
+            $map = $pctMaps[$key] ?? [];
             $pct = $map[(int) $j->employee_id] ?? WorkshopWageSetting::DEFAULT_TECH_SHARE_PCT;
             $gross = (float) $j->amount;
             $net = round($gross * ($pct / 100), 2);
 
             return [
                 'id' => $j->id,
+                'employee_id' => (int) $j->employee_id,
                 'tanggal' => $j->job_date?->toDateString(),
                 'cabang' => $j->branch?->name,
                 'teknisi' => $j->employee?->name,
@@ -517,19 +814,53 @@ class ReportBuilder
                 'gross' => $gross,
                 'pct' => $pct,
                 'net' => $net,
+                'toko' => round($gross - $net, 2),
                 'keterangan' => $j->note,
             ];
         })->all();
 
-        $gross = collect($rows)->sum('gross');
-        $net = collect($rows)->sum('net');
+        $byTeknisi = collect($rows)
+            ->groupBy('employee_id')
+            ->map(function (Collection $items) {
+                $first = $items->first();
+                $gross = (float) $items->sum('gross');
+                $net = (float) $items->sum('net');
+                $uniquePcts = $items->pluck('pct')->unique()->values();
+                // Satu % jika konsisten di periode; jika campur pakai efektif dari upah/gross.
+                $techSharePct = $uniquePcts->count() === 1
+                    ? (float) $uniquePcts->first()
+                    : ($gross > 0 ? round(($net / $gross) * 100, 2) : 0.0);
+                $shopSharePct = round(100 - $techSharePct, 2);
+
+                return [
+                    'employee_id' => (int) ($first['employee_id'] ?? 0),
+                    'teknisi' => $first['teknisi'] ?? '-',
+                    'cabang' => $first['cabang'] ?? '-',
+                    'jumlah_job' => $items->count(),
+                    'total_gross' => $gross,
+                    'tech_share_pct' => $techSharePct,
+                    'shop_share_pct' => $shopSharePct,
+                    'pct_mixed' => $uniquePcts->count() > 1,
+                    'total_net' => $net,
+                    'total_shop' => round($gross - $net, 2),
+                ];
+            })
+            ->sortBy('teknisi', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values()
+            ->all();
+
+        $gross = (float) collect($rows)->sum('gross');
+        $net = (float) collect($rows)->sum('net');
 
         return [
             'rows' => $rows,
+            'by_teknisi' => $byTeknisi,
             'jumlah' => count($rows),
+            'jumlah_teknisi' => count($byTeknisi),
             'total_gross' => $gross,
             'total_net' => $net,
             'total_shop' => round($gross - $net, 2),
+            'employee_id' => $filters['employee_id'] ?? null,
         ];
     }
 
@@ -541,6 +872,9 @@ class ReportBuilder
         $monthStart = $from->copy()->startOfMonth()->toDateString();
         $monthEnd = $from->copy()->endOfMonth()->toDateString();
 
+        $daysInMonth = (int) $from->daysInMonth;
+
+        // Selaras board closing: PIC ikut tampil; hanya jabatan Owner disembunyikan.
         $employees = Employee::query()
             ->with('branch:id,name')
             ->where('status', 'active')
@@ -553,7 +887,7 @@ class ReportBuilder
                     ->pluck('id');
                 $q->whereIn('branch_id', $konterIds);
             })
-            ->withoutManagement()
+            ->withoutOwner()
             ->orderBy('name')
             ->get();
 
@@ -570,24 +904,33 @@ class ReportBuilder
             ->where('month', $month)
             ->pluck('target', 'employee_id');
 
-        $rows = $employees->map(function (Employee $emp) use ($closings, $targets) {
+        $rows = $employees->map(function (Employee $emp) use ($closings, $targets, $daysInMonth) {
             $qty = (int) ($closings->get($emp->id, collect())->sum('qty'));
-            $target = (int) ($targets[$emp->id] ?? 0);
+            $target = $targets->has($emp->id)
+                ? (int) $targets[$emp->id]
+                : $daysInMonth;
             $pct = $target > 0 ? round(($qty / $target) * 100, 1) : null;
+            $tercapai = $target > 0 ? $qty >= $target : $qty > 0;
 
             return [
                 'employee_id' => $emp->id,
                 'nama' => $emp->name,
+                'phone' => $emp->phone,
                 'cabang' => $emp->branch?->name,
                 'qty' => $qty,
                 'target' => $target,
                 'pct' => $pct,
                 'selisih' => $qty - $target,
+                'tercapai' => $tercapai,
+                'status' => $tercapai ? 'tercapai' : 'belum',
+                'status_label' => $tercapai ? 'Tercapai' : 'Belum tercapai',
             ];
         })->values()->all();
 
         $totalQty = collect($rows)->sum('qty');
         $totalTarget = collect($rows)->sum('target');
+        $jumlahTercapai = collect($rows)->where('tercapai', true)->count();
+        $jumlahBelum = collect($rows)->where('tercapai', false)->count();
 
         return [
             'year' => $year,
@@ -597,6 +940,9 @@ class ReportBuilder
             'total_qty' => $totalQty,
             'total_target' => $totalTarget,
             'pct' => $totalTarget > 0 ? round(($totalQty / $totalTarget) * 100, 1) : null,
+            'jumlah_tercapai' => $jumlahTercapai,
+            'jumlah_belum' => $jumlahBelum,
+            'jumlah_karyawan' => count($rows),
         ];
     }
 
@@ -606,8 +952,8 @@ class ReportBuilder
             ->with(['branch:id,name', 'account:id,name,code', 'user:id,name'])
             ->whereDate('reconciliation_date', '>=', $filters['date_from'])
             ->whereDate('reconciliation_date', '<=', $filters['date_to'])
-            ->orderBy('reconciliation_date')
-            ->orderBy('id');
+            ->orderByDesc('reconciliation_date')
+            ->orderByDesc('id');
 
         if ($filters['branch_id']) {
             $query->where('branch_id', $filters['branch_id']);
@@ -671,5 +1017,106 @@ class ReportBuilder
         }
 
         return $query;
+    }
+
+    public function keuntunganPulsa(array $filters): array
+    {
+        $query = PulsaDailySheet::query()
+            ->with([
+                'branch:id,name',
+                'balances',
+                'expenses',
+                'inputter:id,name',
+            ])
+            ->whereDate('sheet_date', '>=', $filters['date_from'])
+            ->whereDate('sheet_date', '<=', $filters['date_to'])
+            ->orderByDesc('sheet_date')
+            ->orderByDesc('id');
+
+        if ($filters['branch_id']) {
+            $query->where('branch_id', $filters['branch_id']);
+        } else {
+            // Owner tanpa filter cabang: hanya cabang konter.
+            $konterIds = Branch::query()
+                ->with('branchType')
+                ->get()
+                ->filter(fn (Branch $b) => ! $b->isWorkshop())
+                ->pluck('id')
+                ->all();
+            $query->whereIn('branch_id', $konterIds ?: [0]);
+        }
+
+        $rows = $query->get()->map(function (PulsaDailySheet $sheet) {
+            return [
+                'id' => $sheet->id,
+                'tanggal' => $sheet->sheet_date?->toDateString() ?? (string) $sheet->sheet_date,
+                'cabang' => $sheet->branch?->name,
+                'uang_pulsa' => (float) $sheet->cash_on_hand,
+                'saldo_terpotong' => (float) $sheet->total_used_balance,
+                'pengeluaran' => (float) $sheet->total_expense,
+                'total_uang' => (float) $sheet->total_cash,
+                'keuntungan' => (float) $sheet->profit,
+                'oleh' => $sheet->inputter?->name,
+                'balances' => $sheet->balances->map(fn ($b) => [
+                    'provider' => $b->provider_name,
+                    'kemarin' => (float) $b->opening_balance,
+                    'tambah' => (float) $b->topup_amount,
+                    'sekarang' => (float) $b->closing_balance,
+                    'terpakai' => (float) $b->used_amount,
+                ])->values()->all(),
+                'expenses' => $sheet->expenses->map(fn ($e) => [
+                    'nama' => $e->name,
+                    'nominal' => (float) $e->amount,
+                ])->values()->all(),
+            ];
+        })->all();
+
+        return [
+            'rows' => $rows,
+            'jumlah' => count($rows),
+            'total_uang_pulsa' => round(collect($rows)->sum('uang_pulsa'), 2),
+            'total_saldo_terpotong' => round(collect($rows)->sum('saldo_terpotong'), 2),
+            'total_pengeluaran' => round(collect($rows)->sum('pengeluaran'), 2),
+            'total_uang' => round(collect($rows)->sum('total_uang'), 2),
+            'total_keuntungan' => round(collect($rows)->sum('keuntungan'), 2),
+        ];
+    }
+
+    public function brilink(array $filters): array
+    {
+        $query = BrilinkDailySheet::query()
+            ->with(['branch:id,name', 'lines', 'inputter:id,name'])
+            ->whereDate('sheet_date', '>=', $filters['date_from'])
+            ->whereDate('sheet_date', '<=', $filters['date_to'])
+            ->orderByDesc('sheet_date')
+            ->orderByDesc('id');
+
+        if ($filters['branch_id']) {
+            $query->where('branch_id', $filters['branch_id']);
+        }
+
+        $rows = $query->get()->map(function (BrilinkDailySheet $sheet) {
+            return [
+                'id' => $sheet->id,
+                'tanggal' => $sheet->sheet_date?->toDateString() ?? (string) $sheet->sheet_date,
+                'cabang' => $sheet->branch?->name,
+                'saldo_kemarin' => (float) $sheet->previous_total,
+                'total' => (float) $sheet->total_amount,
+                'keuntungan' => (float) $sheet->profit,
+                'oleh' => $sheet->inputter?->name,
+                'lines' => $sheet->lines->map(fn ($l) => [
+                    'nama' => $l->name,
+                    'nominal' => (float) $l->amount,
+                ])->values()->all(),
+            ];
+        })->all();
+
+        return [
+            'rows' => $rows,
+            'jumlah' => count($rows),
+            'total_saldo_kemarin' => round(collect($rows)->sum('saldo_kemarin'), 2),
+            'total_hari_ini' => round(collect($rows)->sum('total'), 2),
+            'total_keuntungan' => round(collect($rows)->sum('keuntungan'), 2),
+        ];
     }
 }

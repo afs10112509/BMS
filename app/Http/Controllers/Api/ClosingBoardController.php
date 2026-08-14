@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
+use App\Models\ClosingPeriodLock;
 use App\Models\Employee;
 use App\Models\EmployeeDailyClosing;
 use App\Models\EmployeeMonthlyTarget;
@@ -54,8 +55,8 @@ class ClosingBoardController extends Controller
             ->whereHas('branch', function ($q) {
                 $q->where('type', Branch::TYPE_KONTER);
             })
-            // Non-manajemen: sembunyikan Owner/PIC.
-            ->withoutManagement()
+            // PIC boleh ikut closingan; hanya Owner yang disembunyikan.
+            ->withoutOwner()
             ->orderBy('name');
 
         if ($branchId) {
@@ -93,7 +94,10 @@ class ClosingBoardController extends Controller
                 }
             }
 
-            $target = (int) ($targets->get($employee->id)?->target ?? 0);
+            $saved = $targets->get($employee->id);
+            $isDefaultTarget = $saved === null;
+            // Default target = jumlah hari bulan; tetap bisa diubah & disimpan.
+            $target = $isDefaultTarget ? $daysInMonth : (int) $saved->target;
             $pct = $target > 0 ? round(($total / $target) * 100, 2) : null;
 
             return [
@@ -104,12 +108,22 @@ class ClosingBoardController extends Controller
                 'daily' => $daily,
                 'total' => $total,
                 'target' => $target,
+                'target_is_default' => $isDefaultTarget,
                 'pct' => $pct,
             ];
         })->values();
 
+        $branchIds = $rows->pluck('branch_id')->filter()->unique()->values()->all();
+        $locks = ClosingPeriodLock::query()
+            ->whereIn('branch_id', $branchIds ?: [0])
+            ->where('year', $year)
+            ->where('month', $month)
+            ->where('is_locked', true)
+            ->get()
+            ->keyBy('branch_id');
+
         // Group by branch for owner/admin view + total harian per cabang
-        $byBranch = $rows->groupBy('branch_name')->map(function ($group, $branchName) use ($daysInMonth) {
+        $byBranch = $rows->groupBy('branch_name')->map(function ($group, $branchName) use ($daysInMonth, $locks) {
             $dailyTotals = array_fill(1, $daysInMonth, 0);
             foreach ($group as $row) {
                 for ($d = 1; $d <= $daysInMonth; $d++) {
@@ -117,11 +131,17 @@ class ClosingBoardController extends Controller
                 }
             }
 
+            $gid = (int) ($group->first()['branch_id'] ?? 0);
+            $lock = $locks->get($gid);
+
             return [
+                'branch_id' => $gid ?: null,
                 'branch_name' => $branchName ?: '—',
                 'branch_total' => $group->sum('total'),
                 'branch_target' => $group->sum('target'),
                 'daily_totals' => $dailyTotals,
+                'is_locked' => (bool) $lock,
+                'locked_at' => $lock?->locked_at?->timezone(config('app.timezone'))->format('d/m/Y H:i'),
                 'rows' => $group->values(),
             ];
         })->values();
@@ -131,6 +151,18 @@ class ClosingBoardController extends Controller
             for ($d = 1; $d <= $daysInMonth; $d++) {
                 $grandDaily[$d] += (int) ($group['daily_totals'][$d] ?? 0);
             }
+        }
+
+        $isLocked = false;
+        $lockedAt = null;
+        if ($branchId) {
+            $lock = $locks->get($branchId);
+            $isLocked = (bool) $lock;
+            $lockedAt = $lock?->locked_at?->timezone(config('app.timezone'))->format('d/m/Y H:i');
+        } elseif ($user->isAdmin() && $user->branch_id) {
+            $lock = $locks->get((int) $user->branch_id);
+            $isLocked = (bool) $lock;
+            $lockedAt = $lock?->locked_at?->timezone(config('app.timezone'))->format('d/m/Y H:i');
         }
 
         return response()->json([
@@ -143,9 +175,74 @@ class ClosingBoardController extends Controller
                 'grand_total' => $rows->sum('total'),
                 'grand_target' => $rows->sum('target'),
                 'daily_totals' => $grandDaily,
+                'is_locked' => $isLocked,
+                'locked_at' => $lockedAt,
             ],
             'data' => $rows,
             'groups' => $byBranch,
+        ]);
+    }
+
+    public function lock(Request $request): JsonResponse
+    {
+        return $this->setLock($request, locked: true);
+    }
+
+    public function unlock(Request $request): JsonResponse
+    {
+        return $this->setLock($request, locked: false);
+    }
+
+    protected function setLock(Request $request, bool $locked): JsonResponse
+    {
+        $user = $request->user();
+        if (! $user->isOwner()) {
+            return response()->json([
+                'message' => 'Hanya Owner yang dapat mengunci/membuka target closingan.',
+            ], 403);
+        }
+
+        $data = $request->validate([
+            'branch_id' => ['required', 'integer', 'exists:branches,id'],
+            'year' => ['required', 'integer', 'min:2020', 'max:2100'],
+            'month' => ['required', 'integer', 'min:1', 'max:12'],
+        ]);
+
+        $branch = Branch::query()->with('branchType')->findOrFail((int) $data['branch_id']);
+        if ($branch->isWorkshop()) {
+            return response()->json([
+                'message' => 'Modul closingan hanya untuk cabang konter.',
+            ], 422);
+        }
+
+        $year = (int) $data['year'];
+        $month = (int) $data['month'];
+
+        $row = ClosingPeriodLock::query()->updateOrCreate(
+            [
+                'branch_id' => (int) $branch->id,
+                'year' => $year,
+                'month' => $month,
+            ],
+            [
+                'is_locked' => $locked,
+                'locked_by' => $locked ? $user->id : null,
+                'locked_at' => $locked ? now() : null,
+            ]
+        );
+
+        return response()->json([
+            'message' => $locked
+                ? 'Target closingan dikunci. Admin cabang tidak dapat mengubah data.'
+                : 'Kunci target closingan dibuka.',
+            'data' => [
+                'branch_id' => (int) $branch->id,
+                'branch_name' => $branch->name,
+                'year' => $year,
+                'month' => $month,
+                'is_locked' => (bool) $row->is_locked,
+                'locked_at' => $row->locked_at?->timezone(config('app.timezone'))->format('d/m/Y H:i'),
+            ],
         ]);
     }
 
@@ -162,6 +259,10 @@ class ClosingBoardController extends Controller
 
         $employee = Employee::query()->with('branch')->findOrFail($data['employee_id']);
         if ($denied = $this->authorizeEmployee($user, $employee)) {
+            return $denied;
+        }
+
+        if ($denied = $this->denyIfClosingLocked($user, (int) $employee->branch_id, (int) $data['year'], (int) $data['month'])) {
             return $denied;
         }
 
@@ -205,6 +306,11 @@ class ClosingBoardController extends Controller
         }
 
         $date = Carbon::parse($data['closing_date'])->toDateString();
+        $carbon = Carbon::parse($date);
+        if ($denied = $this->denyIfClosingLocked($user, (int) $employee->branch_id, (int) $carbon->year, (int) $carbon->month)) {
+            return $denied;
+        }
+
         $this->payrollLockChecker->assertEmployeeDateOpen($employee->id, $date);
         $qty = (int) $data['qty'];
 
@@ -235,6 +341,26 @@ class ClosingBoardController extends Controller
             'message' => 'Closingan berhasil disimpan.',
             'data' => $row,
         ]);
+    }
+
+    protected function denyIfClosingLocked($user, int $branchId, int $year, int $month): ?JsonResponse
+    {
+        // Owner tetap boleh mengubah meski terkunci.
+        if ($user->isOwner()) {
+            return null;
+        }
+
+        if (! $branchId) {
+            return null;
+        }
+
+        if (ClosingPeriodLock::isBranchPeriodLocked($branchId, $year, $month)) {
+            return response()->json([
+                'message' => 'Aksi ditolak: Target closingan periode ini telah dikunci oleh Owner.',
+            ], 403);
+        }
+
+        return null;
     }
 
     private function authorizeEmployee($user, Employee $employee): ?JsonResponse
