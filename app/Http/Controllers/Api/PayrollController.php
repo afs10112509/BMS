@@ -7,6 +7,7 @@ use App\Models\Branch;
 use App\Models\Employee;
 use App\Models\Payroll;
 use App\Models\ServiceRecord;
+use App\Services\AuditLogger;
 use App\Services\Payroll\PayrollCalculator;
 use App\Services\Payroll\PayrollLocker;
 use Carbon\Carbon;
@@ -19,6 +20,7 @@ class PayrollController extends Controller
     public function __construct(
         protected PayrollCalculator $calculator,
         protected PayrollLocker $locker,
+        protected AuditLogger $auditLogger,
     ) {}
 
     public function board(Request $request): JsonResponse
@@ -62,11 +64,13 @@ class PayrollController extends Controller
             if ($payroll && $payroll->isLocked()) {
                 $row = $this->calculator->rowFromPayroll($payroll, $employee);
                 $row['insentif_pic_auto'] = $picAuto;
+                $row['gapok_auto'] = (float) ($auto['gapok'] ?? 0);
+                $row['kasbon_auto'] = (float) ($auto['kasbon'] ?? 0);
 
                 return $row;
             }
 
-            $kasbon = (float) ($auto['kasbon'] ?? 0);
+            $kasbonAuto = (float) ($auto['kasbon'] ?? 0);
             $insentifPic = 0.0;
             if ($isPic) {
                 $insentifPic = $payroll !== null
@@ -82,7 +86,9 @@ class PayrollController extends Controller
                 'insentif_acc' => (float) ($payroll?->insentif_acc ?? 0),
                 'bonus_absen' => (float) ($payroll?->bonus_absen ?? 0),
                 'hutang' => (float) ($payroll?->hutang ?? 0),
-                'pengeluaran' => $kasbon,
+                'pengeluaran' => $payroll !== null
+                    ? (float) $payroll->pengeluaran
+                    : $kasbonAuto,
                 'note' => $payroll?->note,
             ];
 
@@ -122,7 +128,8 @@ class PayrollController extends Controller
                 'bonus_absen' => $manual['bonus_absen'],
                 'hutang' => $manual['hutang'],
                 'pengeluaran' => $manual['pengeluaran'],
-                'kasbon' => $kasbon,
+                'kasbon' => $manual['pengeluaran'],
+                'kasbon_auto' => $kasbonAuto,
                 'total' => $total,
                 'note' => $manual['note'],
                 'year' => $year,
@@ -209,6 +216,22 @@ class PayrollController extends Controller
 
         $this->locker->saveDrafts($employees, $year, $month, $data['items'], $user);
 
+        $this->auditLogger->logTable(
+            $user,
+            'UPDATE',
+            'payrolls',
+            (int) ($branchId ?: 0),
+            null,
+            [
+                'batch_action' => 'save',
+                'branch_id' => $branchId,
+                'year' => $year,
+                'month' => $month,
+                'employee_count' => count($data['items']),
+            ],
+            $branchId ? (int) $branchId : null,
+        );
+
         return response()->json([
             'message' => 'Rekap gaji berhasil disimpan.',
             'meta' => [
@@ -243,6 +266,22 @@ class PayrollController extends Controller
         }
 
         $this->locker->lockPeriod($employees, $year, $month, $user);
+
+        $this->auditLogger->logTable(
+            $user,
+            'UPDATE',
+            'payrolls',
+            (int) ($branchId ?: 0),
+            null,
+            [
+                'batch_action' => 'lock',
+                'branch_id' => $branchId,
+                'year' => $year,
+                'month' => $month,
+                'employee_count' => $employees->count(),
+            ],
+            $branchId ? (int) $branchId : null,
+        );
 
         return response()->json([
             'message' => 'Rekap gaji berhasil dikunci.',
@@ -295,6 +334,23 @@ class PayrollController extends Controller
             $message = $paidCount > 0
                 ? "Kunci gaji dibuka. {$paidCount} status bayar direset, slip kembali ke draf."
                 : 'Kunci gaji dibuka. Slip kembali ke draf.';
+
+            $this->auditLogger->logTable(
+                $user,
+                'UPDATE',
+                'payrolls',
+                (int) ($branchId ?: 0),
+                null,
+                [
+                    'batch_action' => 'unlock',
+                    'branch_id' => $branchId,
+                    'year' => $year,
+                    'month' => $month,
+                    'employee_count' => (int) $updated,
+                    'paid_reset' => $paidCount,
+                ],
+                $branchId ? (int) $branchId : null,
+            );
         }
 
         return response()->json([
@@ -366,6 +422,23 @@ class PayrollController extends Controller
             $payroll->paid_by = $user->id;
             $payroll->save();
 
+            $this->auditLogger->log(
+                $user,
+                'UPDATE',
+                $payroll,
+                null,
+                [
+                    'batch_action' => 'mark_paid',
+                    'employee_id' => $employeeId,
+                    'employee_name' => $employee->name,
+                    'branch_id' => $payroll->branch_id,
+                    'year' => $year,
+                    'month' => $month,
+                    'total' => $payroll->total,
+                ],
+                (int) $payroll->branch_id,
+            );
+
             return response()->json([
                 'message' => 'Slip ditandai sudah dibayar.',
                 'data' => [
@@ -383,6 +456,23 @@ class PayrollController extends Controller
         $payroll->paid_at = null;
         $payroll->paid_by = null;
         $payroll->save();
+
+        $this->auditLogger->log(
+            $user,
+            'UPDATE',
+            $payroll,
+            null,
+            [
+                'batch_action' => 'mark_unpaid',
+                'employee_id' => $employeeId,
+                'employee_name' => $employee->name,
+                'branch_id' => $payroll->branch_id,
+                'year' => $year,
+                'month' => $month,
+                'total' => $payroll->total,
+            ],
+            (int) $payroll->branch_id,
+        );
 
         return response()->json([
             'message' => 'Status bayar dibatalkan.',
@@ -444,7 +534,10 @@ class PayrollController extends Controller
             $insentifAcc = (float) ($payroll?->insentif_acc ?? 0);
             $bonusAbsen = (float) ($payroll?->bonus_absen ?? 0);
             $hutang = (float) ($payroll?->hutang ?? 0);
-            $pengeluaran = (float) ($auto['kasbon'] ?? 0);
+            $kasbonAuto = (float) ($auto['kasbon'] ?? 0);
+            $pengeluaran = $payroll !== null
+                ? (float) $payroll->pengeluaran
+                : $kasbonAuto;
             $gapok = $payroll !== null
                 ? (float) $payroll->gapok
                 : (float) $auto['gapok'];
@@ -466,6 +559,7 @@ class PayrollController extends Controller
                 'hutang' => $hutang,
                 'pengeluaran' => $pengeluaran,
                 'kasbon' => $pengeluaran,
+                'kasbon_auto' => $kasbonAuto,
                 'note' => $payroll?->note,
                 'year' => $year,
                 'month' => $month,

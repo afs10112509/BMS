@@ -409,7 +409,7 @@
     <p>{{ $data['periode_label'] ?? '' }} · {{ $data['jumlah'] ?? 0 }} karyawan
       · Total Rp {{ number_format($data['total_gaji'] ?? 0, 0, ',', '.') }}
       · Draft {{ $data['draft'] ?? 0 }} · Locked {{ $data['locked'] ?? 0 }}</p>
-    <p class="meta-note">Total = Gapok + PIC + HP + Service + ACC + Bonus − Hutang − Kasbon (kasbon dari transaksi; PIC hanya jabatan PIC)</p>
+      <p class="meta-note">Total = Gapok + PIC + HP + Service + ACC + Bonus − Hutang − Kasbon (PIC hanya jabatan PIC)</p>
     <table class="data">
       <thead>
         <tr>

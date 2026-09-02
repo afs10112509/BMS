@@ -46,8 +46,9 @@ class PayrollLocker
                 $insentifAcc = (float) ($existing?->insentif_acc ?? 0);
                 $bonusAbsen = (float) ($existing?->bonus_absen ?? 0);
                 $hutang = (float) ($existing?->hutang ?? 0);
-                // Kasbon otomatis dari transaksi (semua cabang); hutang tetap manual.
-                $pengeluaran = (float) ($auto['kasbon'] ?? 0);
+                $pengeluaran = $existing !== null
+                    ? (float) $existing->pengeluaran
+                    : (float) ($auto['kasbon'] ?? 0);
                 $total = Payroll::computeTotal(
                     $gapok,
                     $insentifPic,
@@ -113,7 +114,6 @@ class PayrollLocker
                 $employee = $employees->get($employeeId);
                 $auto = $autoByEmployee[$employeeId] ?? $this->calculator->emptyAuto($employee);
                 $isPic = (bool) ($auto['is_pic'] ?? $employee->hasPosition(Employee::POS_PIC));
-
                 $gapok = array_key_exists('gapok', $item)
                     ? (float) $item['gapok']
                     : (float) $auto['gapok'];
@@ -121,8 +121,9 @@ class PayrollLocker
                 $insentifAcc = (float) ($item['insentif_acc'] ?? 0);
                 $bonusAbsen = (float) ($item['bonus_absen'] ?? 0);
                 $hutang = (float) ($item['hutang'] ?? 0);
-                // Abaikan input manual pengeluaran — selalu dari total kasbon transaksi.
-                $pengeluaran = (float) ($auto['kasbon'] ?? 0);
+                $pengeluaran = array_key_exists('pengeluaran', $item)
+                    ? (float) $item['pengeluaran']
+                    : (float) ($auto['kasbon'] ?? 0);
                 $total = Payroll::computeTotal(
                     $gapok,
                     $insentifPic,

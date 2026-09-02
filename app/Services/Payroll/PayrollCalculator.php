@@ -74,7 +74,8 @@ class PayrollCalculator
             $days = (int) ($presentDays[$employee->id] ?? 0);
             $qty = (int) ($closingQty[$employee->id] ?? 0);
             $profit = Money::of($serviceProfit[$employee->id] ?? 0);
-            $gapok = $isPromotor
+            // Promotor & teknisi: gapok 0 (tidak dikali kehadiran); teknisi dapat insentif service.
+            $gapok = ($isPromotor || $isTechnician)
                 ? '0.00'
                 : Money::mul($days, Payroll::GAPOK_RATE);
             $insentifHp = Money::mul($qty, Payroll::HP_RATE);
@@ -324,6 +325,7 @@ class PayrollCalculator
             'hutang' => (float) $payroll->hutang,
             'pengeluaran' => (float) $payroll->pengeluaran,
             'kasbon' => (float) $payroll->pengeluaran,
+            'kasbon_auto' => 0.0,
             'total' => (float) $payroll->total,
             'note' => $payroll->note,
             'year' => (int) $payroll->year,

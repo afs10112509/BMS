@@ -3226,8 +3226,13 @@ const app = createApp({
     function onPayrollManualInput(row, field, e) {
       if (row.status === 'locked') return;
       if (field === 'insentif_pic' && !row.is_pic) return;
-      row[field] = parseInputNumber(e.target.value);
-      e.target.value = formatInputNumber(row[field]);
+      const value = parseInputNumber(e.target.value);
+      row[field] = value;
+      if (field === 'pengeluaran' || field === 'kasbon') {
+        row.pengeluaran = value;
+        row.kasbon = value;
+      }
+      e.target.value = formatInputNumber(value);
       recomputePayrollRowTotal(row);
     }
 
@@ -3375,6 +3380,25 @@ const app = createApp({
         };
         if (isOwner.value && payrollFilter.branch_id) {
           payload.branch_id = Number(payrollFilter.branch_id);
+        }
+        const draftRows = rows.filter((r) => r.status !== 'locked');
+        if (draftRows.length) {
+          await api('/payrolls/save', {
+            method: 'PUT',
+            body: JSON.stringify({
+              ...payload,
+              items: draftRows.map((r) => ({
+                employee_id: r.employee_id,
+                gapok: Number(r.gapok || 0),
+                insentif_pic: r.is_pic ? Number(r.insentif_pic || 0) : 0,
+                insentif_acc: Number(r.insentif_acc || 0),
+                bonus_absen: Number(r.bonus_absen || 0),
+                hutang: Number(r.hutang || 0),
+                pengeluaran: Number(r.pengeluaran || 0),
+                note: r.note || null,
+              })),
+            }),
+          });
         }
         await api('/payrolls/lock', {
           method: 'POST',
@@ -11384,7 +11408,7 @@ const app = createApp({
                   <button class="btn btn-primary btn-sm" type="button" :disabled="loading || payrollBoard.meta?.all_locked" @click="savePayrollBoard">Simpan</button>
                   <button class="btn btn-danger btn-sm" type="button" :disabled="loading || payrollBoard.meta?.all_locked" @click="lockPayrollBoard">Kunci</button>
                   <button v-if="isOwner && payrollBoard.meta?.any_locked" class="btn btn-ghost btn-sm" type="button" :disabled="loading" @click="unlockPayrollBoard">Buka Kunci</button>
-                  <button class="btn btn-ghost btn-sm" type="button" title="Muat ulang dari absensi, closing, service, kasbon, dan usulan PIC Bagi Hasil" :disabled="loading" @click="loadPayrollBoard">Hitung Ulang</button>
+                  <button class="btn btn-ghost btn-sm" type="button" title="Muat ulang dari absensi, closing, service, dan usulan PIC Bagi Hasil. Gapok &amp; kasbon yang sudah disimpan tidak diubah." :disabled="loading" @click="loadPayrollBoard">Hitung Ulang</button>
                 </div>
               </div>
             </div>
@@ -11408,7 +11432,7 @@ const app = createApp({
                     <th v-if="isOwner && !payrollFilter.branch_id" class="col-sticky-2">Cabang</th>
                     <th>Jabatan</th>
                     <th title="Hari hadir">Hadir</th>
-                    <th title="Gaji pokok">Gapok</th>
+                    <th title="Gaji pokok — bisa diedit untuk semua jabatan">Gapok</th>
                     <th title="Insentif PIC (manual / dari Bagi Hasil). Hanya jabatan PIC.">PIC</th>
                     <th title="Qty closing HP">Qty</th>
                     <th title="Insentif HP">HP</th>
@@ -11416,7 +11440,7 @@ const app = createApp({
                     <th title="Insentif ACC">ACC</th>
                     <th>Bonus</th>
                     <th title="Diisi manual">Hutang</th>
-                    <th title="Otomatis dari transaksi kategori Kasbon (semua cabang)">Kasbon</th>
+                    <th title="Kasbon — bisa diedit. Usulan awal dari transaksi kategori Kasbon.">Kasbon</th>
                     <th>Total</th>
                     <th>Status</th>
                     <th>Bayar</th>
@@ -11441,7 +11465,7 @@ const app = createApp({
                           class="payroll-cell"
                           type="text"
                           inputmode="numeric"
-                          title="Dihitung otomatis (hadir × Rp50.000; promotor 0). Bisa diubah manual."
+                          title="Bisa diubah untuk semua jabatan. Usulan otomatis: hadir × Rp50.000 (promotor/teknisi 0)."
                           :disabled="row.status==='locked' || loading"
                           :value="formatInputNumber(row.gapok)"
                           @focus="onPayrollFocus"
@@ -11513,8 +11537,18 @@ const app = createApp({
                           @input="onPayrollManualInput(row, 'hutang', $event)"
                         />
                       </td>
-                      <td class="value-expense" :title="'Total transaksi Kasbon karyawan (semua cabang)'">
-                        {{ formatRp(row.kasbon != null ? row.kasbon : row.pengeluaran) }}
+                      <td>
+                        <input
+                          class="payroll-cell"
+                          type="text"
+                          inputmode="numeric"
+                          :title="'Bisa diubah. Usulan dari transaksi Kasbon: ' + formatRp(row.kasbon_auto != null ? row.kasbon_auto : 0)"
+                          :disabled="row.status==='locked' || loading"
+                          :value="formatInputNumber(row.pengeluaran != null ? row.pengeluaran : row.kasbon)"
+                          @focus="onPayrollFocus"
+                          @keydown="onPayrollKeydown"
+                          @input="onPayrollManualInput(row, 'pengeluaran', $event)"
+                        />
                       </td>
                       <td><strong :class="Number(row.total) < 0 ? 'value-expense' : ''">{{ formatRp(row.total) }}</strong></td>
                       <td>
@@ -13466,7 +13500,7 @@ const app = createApp({
                 Total {{ formatRp(reportResult.data?.total_gaji) }} ·
                 Locked {{ reportResult.data?.locked || 0 }} · Draft {{ reportResult.data?.draft || 0 }}
                 <br>
-                <span class="muted">Total = Gapok + PIC + HP + Service + ACC + Bonus − Hutang − Kasbon (kasbon dari transaksi).</span>
+                <span class="muted">Total = Gapok + PIC + HP + Service + ACC + Bonus − Hutang − Kasbon.</span>
               </div>
               <div class="table-wrap">
                 <table>
