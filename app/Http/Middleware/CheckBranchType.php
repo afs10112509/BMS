@@ -33,6 +33,22 @@ class CheckBranchType
             return $next($request);
         }
 
+        $mode = strtolower(trim($mode));
+
+        // PIC karyawan: boleh lolos jika tipe cabangnya cocok (otorisasi detail di controller).
+        if ($user->isPicEmployee()) {
+            if (in_array($mode, ['konter', 'service', 'allows_service'], true) && $user->isCounterPicEmployee()) {
+                return $next($request);
+            }
+            if (in_array($mode, ['bengkel', 'workshop'], true) && $user->isWorkshopPicEmployee()) {
+                return $next($request);
+            }
+
+            return response()->json([
+                'message' => 'PIC tidak memiliki izin untuk modul tipe cabang ini.',
+            ], 403);
+        }
+
         if (! $user->isAdmin()) {
             return response()->json([
                 'message' => 'Anda tidak memiliki izin untuk mengakses fitur ini.',
@@ -52,7 +68,6 @@ class CheckBranchType
             ], 422);
         }
 
-        $mode = strtolower(trim($mode));
         $isWorkshop = $branch->isWorkshop();
 
         if (in_array($mode, ['konter', 'service', 'allows_service'], true)) {

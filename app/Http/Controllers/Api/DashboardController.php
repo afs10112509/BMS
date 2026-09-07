@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
+use App\Models\BrilinkDailySheet;
 use App\Models\Employee;
 use App\Models\EmployeeAttendance;
 use App\Models\EmployeeDailyClosing;
@@ -11,6 +12,7 @@ use App\Models\EmployeeMonthlyTarget;
 use App\Models\InterBranchTransfer;
 use App\Models\Payroll;
 use App\Models\PeriodLock;
+use App\Models\PulsaDailySheet;
 use App\Models\Reconciliation;
 use App\Models\ServiceRecord;
 use App\Models\Transaction;
@@ -129,6 +131,9 @@ class DashboardController extends Controller
             'closing' => ($isKonterScope === false) ? null : $this->closingSummary($branchId, $year, $month),
             'attendance_today' => $this->attendanceTodaySummary($branchId),
             'workshop_week' => ($isKonterScope === true) ? null : $this->workshopWeekSummary($branchId),
+            'pulsa' => ($isKonterScope === false) ? null : $this->pulsaProfitSummary($branchId, $from, $to),
+            'brilink' => $this->brilinkProfitSummary($branchId, $from, $to),
+            'hasil_per_cabang' => $this->hasilPerCabang($agregat, $service, $from, $to, $year, $month, $branchId),
             'arus_kas_harian' => null,
             'saldo_per_akun' => null,
         ];
@@ -197,6 +202,9 @@ class DashboardController extends Controller
                 'closing' => $isWorkshop ? null : $this->closingSummary($branchId, $year, $month),
                 'attendance_today' => $this->attendanceTodaySummary($branchId),
                 'workshop_week' => $isWorkshop ? $this->workshopWeekSummary($branchId) : null,
+                'pulsa' => $isWorkshop ? null : $this->pulsaProfitSummary($branchId, $from, $to),
+                'brilink' => $this->brilinkProfitSummary($branchId, $from, $to),
+                'daily_ops' => $this->dailyOpsChecklist($branchId, $isWorkshop),
                 'recon_status' => $this->reconStatusSummary($accounts),
                 'transaksi_terakhir' => Transaction::query()
                     ->with(['category', 'account'])
@@ -555,5 +563,251 @@ class DashboardController extends Controller
         }
 
         return round((($current - $previous) / abs($previous)) * 100, 1);
+    }
+
+    /**
+     * @return array{sheet_count:int,total_profit:float}
+     */
+    protected function pulsaProfitSummary(?int $branchId, string $from, string $to): array
+    {
+        $query = PulsaDailySheet::query()
+            ->whereDate('sheet_date', '>=', $from)
+            ->whereDate('sheet_date', '<=', $to);
+
+        if ($branchId) {
+            $query->where('branch_id', $branchId);
+        } else {
+            $konterIds = Branch::query()
+                ->with('branchType')
+                ->get()
+                ->filter(fn (Branch $b) => ! $b->isWorkshop())
+                ->pluck('id');
+            $query->whereIn('branch_id', $konterIds);
+        }
+
+        $rows = $query->get(['profit']);
+
+        return [
+            'sheet_count' => $rows->count(),
+            'total_profit' => round((float) $rows->sum('profit'), 2),
+        ];
+    }
+
+    /**
+     * @return array{sheet_count:int,total_profit:float}
+     */
+    protected function brilinkProfitSummary(?int $branchId, string $from, string $to): array
+    {
+        $query = BrilinkDailySheet::query()
+            ->whereDate('sheet_date', '>=', $from)
+            ->whereDate('sheet_date', '<=', $to);
+
+        if ($branchId) {
+            $query->where('branch_id', $branchId);
+        }
+
+        $rows = $query->get(['profit']);
+
+        return [
+            'sheet_count' => $rows->count(),
+            'total_profit' => round((float) $rows->sum('profit'), 2),
+        ];
+    }
+
+    /**
+     * @param  list<array{branch_id:int,nama_cabang:string,pemasukan:float|int,pengeluaran:float|int,saldo?:float|int}>  $agregat
+     * @param  array{per_cabang:list<array{branch_id:int,nama_cabang:string,jumlah:int,total_harga:float,total_profit:float}>}  $service
+     * @return list<array<string, mixed>>
+     */
+    protected function hasilPerCabang(
+        array $agregat,
+        array $service,
+        string $from,
+        string $to,
+        int $year,
+        int $month,
+        ?int $branchId,
+    ): array {
+        $branches = Branch::query()
+            ->with('branchType')
+            ->where('status', 'active')
+            ->when($branchId, fn ($q) => $q->where('id', $branchId))
+            ->orderBy('name')
+            ->get();
+
+        $agregatById = collect($agregat)->keyBy('branch_id');
+        $serviceById = collect($service['per_cabang'] ?? [])->keyBy('branch_id');
+
+        $pulsaByBranch = PulsaDailySheet::query()
+            ->selectRaw('branch_id, COUNT(*) as sheet_count, COALESCE(SUM(profit),0) as total_profit')
+            ->whereDate('sheet_date', '>=', $from)
+            ->whereDate('sheet_date', '<=', $to)
+            ->when($branchId, fn ($q) => $q->where('branch_id', $branchId))
+            ->groupBy('branch_id')
+            ->get()
+            ->keyBy('branch_id');
+
+        $brilinkByBranch = BrilinkDailySheet::query()
+            ->selectRaw('branch_id, COUNT(*) as sheet_count, COALESCE(SUM(profit),0) as total_profit')
+            ->whereDate('sheet_date', '>=', $from)
+            ->whereDate('sheet_date', '<=', $to)
+            ->when($branchId, fn ($q) => $q->where('branch_id', $branchId))
+            ->groupBy('branch_id')
+            ->get()
+            ->keyBy('branch_id');
+
+        $balances = collect($this->balanceCalculator->balancesByBranch($branchId, $to))->keyBy('branch_id');
+
+        return $branches->map(function (Branch $branch) use (
+            $agregatById,
+            $serviceById,
+            $pulsaByBranch,
+            $brilinkByBranch,
+            $balances,
+            $year,
+            $month,
+        ) {
+            $id = (int) $branch->id;
+            $agg = $agregatById->get($id);
+            $svc = $serviceById->get($id);
+            $isWorkshop = $branch->isWorkshop();
+            $closing = $isWorkshop ? null : $this->closingSummary($id, $year, $month);
+            $workshop = $isWorkshop ? $this->workshopWeekSummary($id) : null;
+
+            return [
+                'branch_id' => $id,
+                'nama_cabang' => $branch->name,
+                'is_workshop' => $isWorkshop,
+                'omzet' => (float) ($agg['pemasukan'] ?? 0),
+                'beban' => (float) ($agg['pengeluaran'] ?? 0),
+                'profit' => (float) (($agg['pemasukan'] ?? 0) - ($agg['pengeluaran'] ?? 0)),
+                'saldo' => (float) ($balances->get($id)['saldo'] ?? 0),
+                'service_jobs' => (int) ($svc['jumlah'] ?? 0),
+                'service_profit' => (float) ($svc['total_profit'] ?? 0),
+                'closing_qty' => $closing['qty'] ?? null,
+                'closing_target' => $closing['target'] ?? null,
+                'closing_pct' => $closing['pct'] ?? null,
+                'pulsa_profit' => $isWorkshop ? null : round((float) ($pulsaByBranch->get($id)?->total_profit ?? 0), 2),
+                'brilink_profit' => round((float) ($brilinkByBranch->get($id)?->total_profit ?? 0), 2),
+                'workshop_gross' => $workshop['gross'] ?? null,
+                'workshop_tech_net' => $workshop['tech_net'] ?? null,
+            ];
+        })->values()->all();
+    }
+
+    /**
+     * @return list<array{key:string,label:string,page:string,done:bool,detail:string}>
+     */
+    protected function dailyOpsChecklist(int $branchId, bool $isWorkshop): array
+    {
+        $today = now()->toDateString();
+        $att = $this->attendanceTodaySummary($branchId);
+        $attDone = ((int) $att['unmarked']) === 0 && ((int) $att['total_employees']) > 0;
+
+        $brilinkDone = BrilinkDailySheet::query()
+            ->where('branch_id', $branchId)
+            ->whereDate('sheet_date', $today)
+            ->exists();
+
+        $txCount = Transaction::query()
+            ->where('branch_id', $branchId)
+            ->whereDate('transaction_date', $today)
+            ->count();
+
+        $items = [
+            [
+                'key' => 'attendance',
+                'label' => 'Absensi',
+                'page' => 'attendance',
+                'done' => $attDone,
+                'detail' => $attDone
+                    ? 'Lengkap'
+                    : ('Belum absen: '.$att['unmarked'].'/'.$att['total_employees']),
+            ],
+        ];
+
+        if ($isWorkshop) {
+            $jobCount = WorkshopJob::query()
+                ->where('branch_id', $branchId)
+                ->whereDate('job_date', $today)
+                ->count();
+
+            $items[] = [
+                'key' => 'transactions',
+                'label' => 'Transaksi',
+                'page' => 'transactions',
+                'done' => $txCount > 0,
+                'detail' => $txCount > 0 ? ($txCount.' transaksi hari ini') : 'Belum ada transaksi',
+            ];
+            $items[] = [
+                'key' => 'workshop',
+                'label' => 'Upah Kerja',
+                'page' => 'workshop-wages',
+                'done' => $jobCount > 0,
+                'detail' => $jobCount > 0 ? ($jobCount.' job hari ini') : 'Belum ada job',
+            ];
+            $items[] = [
+                'key' => 'brilink',
+                'label' => 'Brilink',
+                'page' => 'brilink',
+                'done' => $brilinkDone,
+                'detail' => $brilinkDone ? 'Sudah diisi' : 'Belum diisi',
+            ];
+
+            return $items;
+        }
+
+        $serviceCount = ServiceRecord::query()
+            ->where('branch_id', $branchId)
+            ->whereDate('service_date', $today)
+            ->count();
+
+        $closingCount = EmployeeDailyClosing::query()
+            ->whereDate('closing_date', $today)
+            ->whereHas('employee', fn ($q) => $q->where('branch_id', $branchId)->where('status', 'active'))
+            ->count();
+
+        $pulsaDone = PulsaDailySheet::query()
+            ->where('branch_id', $branchId)
+            ->whereDate('sheet_date', $today)
+            ->exists();
+
+        $items[] = [
+            'key' => 'brilink',
+            'label' => 'Brilink',
+            'page' => 'brilink',
+            'done' => $brilinkDone,
+            'detail' => $brilinkDone ? 'Sudah diisi' : 'Belum diisi',
+        ];
+        $items[] = [
+            'key' => 'services',
+            'label' => 'Catatan Servis',
+            'page' => 'services',
+            'done' => $serviceCount > 0,
+            'detail' => $serviceCount > 0 ? ($serviceCount.' job hari ini') : 'Belum ada servis',
+        ];
+        $items[] = [
+            'key' => 'closings',
+            'label' => 'Closing Harian',
+            'page' => 'closings',
+            'done' => $closingCount > 0,
+            'detail' => $closingCount > 0 ? ($closingCount.' karyawan terisi') : 'Belum diisi',
+        ];
+        $items[] = [
+            'key' => 'pulsa',
+            'label' => 'Keuntungan Pulsa',
+            'page' => 'pulsa-profit',
+            'done' => $pulsaDone,
+            'detail' => $pulsaDone ? 'Sudah diisi' : 'Belum diisi',
+        ];
+        $items[] = [
+            'key' => 'transactions',
+            'label' => 'Transaksi',
+            'page' => 'transactions',
+            'done' => $txCount > 0,
+            'detail' => $txCount > 0 ? ($txCount.' transaksi hari ini') : 'Belum ada transaksi',
+        ];
+
+        return $items;
     }
 }

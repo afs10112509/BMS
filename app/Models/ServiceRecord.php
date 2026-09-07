@@ -25,7 +25,7 @@ class ServiceRecord extends Model
     protected function casts(): array
     {
         return [
-            'service_date' => 'date',
+            'service_date' => 'date:Y-m-d',
             'cost' => 'decimal:2',
             'price' => 'decimal:2',
             'profit' => 'decimal:2',

@@ -25,8 +25,8 @@ class WorkshopWeek extends Model
     protected function casts(): array
     {
         return [
-            'week_start' => 'date',
-            'week_end' => 'date',
+            'week_start' => 'date:Y-m-d',
+            'week_end' => 'date:Y-m-d',
             'tech_share_pct_snapshot' => 'decimal:2',
             'shares_snapshot' => 'array',
             'paid_at' => 'datetime',

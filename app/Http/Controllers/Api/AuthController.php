@@ -27,13 +27,22 @@ class AuthController extends Controller
             ]);
         }
 
+        if ($user->isEmployee()) {
+            $employee = $user->employee;
+            if (! $employee || ! $employee->isActive()) {
+                throw ValidationException::withMessages([
+                    'email' => ['Akun karyawan tidak aktif. Hubungi Owner.'],
+                ]);
+            }
+        }
+
         $token = $user->createToken('api-token')->plainTextToken;
 
         return response()->json([
             'message' => 'Berhasil masuk.',
             'token' => $token,
             'token_type' => 'Bearer',
-            'user' => $user->load('branch.branchType'),
+            'user' => $user->load(['branch.branchType', 'employee.branch.branchType']),
         ]);
     }
 
@@ -49,7 +58,7 @@ class AuthController extends Controller
     public function me(Request $request): JsonResponse
     {
         return response()->json([
-            'data' => $request->user()->load('branch.branchType'),
+            'data' => $request->user()->load(['branch.branchType', 'employee.branch.branchType']),
         ]);
     }
 
