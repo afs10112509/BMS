@@ -2681,7 +2681,8 @@ createApp({
       employeeForm.status = emp.status || 'active';
       employeeForm.joined_at = emp.joined_at ? String(emp.joined_at).slice(0, 10) : '';
       employeeForm.notes = emp.notes || '';
-      employeeForm.kasbon_category_id = emp.kasbon_category_id || emp.kasbon_category?.id || '';
+      const kId = emp.kasbon_category_id ?? emp.kasbon_category?.id;
+      employeeForm.kasbon_category_id = kId != null && kId !== '' ? Number(kId) : '';
       scrollMainTop('#employee-form-card');
       toast('Data dimuat ke form. Ubah lalu klik Perbarui.', 'success');
     }

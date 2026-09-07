@@ -172,7 +172,9 @@ class EmployeeController extends Controller
         unset($data['position']);
         if (array_key_exists('kasbon_category_id', $data)) {
             $raw = $data['kasbon_category_id'];
-            $data['kasbon_category_id'] = ($raw === null || $raw === '') ? null : (int) $raw;
+            $data['kasbon_category_id'] = ($raw === null || $raw === '')
+                ? $this->resolveKasbonCategoryId($data, ignoreEmployeeId: (int) $employee->id)
+                : (int) $raw;
         }
 
         $old = $employee->toArray();
