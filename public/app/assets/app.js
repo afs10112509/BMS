@@ -195,6 +195,13 @@ createApp({
       q: '',
     });
 
+    const txInputMode = ref('single');
+    const txBatchRows = reactive([
+      { type: 'income', category_id: '', account_id: '', amount: '', description: '' },
+      { type: 'expense', category_id: '', account_id: '', amount: '', description: '' },
+      { type: 'expense', category_id: '', account_id: '', amount: '', description: '' },
+    ]);
+
     const txForm = reactive({
       type: 'income',
       category_id: '',
@@ -2993,6 +3000,68 @@ createApp({
       }
     }
 
+    function getCategoriesForType(type) {
+      return categories.value.filter((c) => c.type === type && c.is_active !== false);
+    }
+
+    function addTxBatchRow() {
+      txBatchRows.push({ type: 'income', category_id: '', account_id: '', amount: '', description: '' });
+    }
+
+    function removeTxBatchRow(idx) {
+      if (txBatchRows.length > 1) {
+        txBatchRows.splice(idx, 1);
+      }
+    }
+
+    async function submitBatchTransaction() {
+      const validItems = [];
+      for (let i = 0; i < txBatchRows.length; i++) {
+        const row = txBatchRows[i];
+        const amt = parseInputNumber(row.amount);
+        if (!amt && !row.category_id && !row.account_id && !row.description) {
+          continue;
+        }
+        if (!amt || !row.category_id || !row.account_id) {
+          toast(`Baris #${i + 1}: Mohon lengkapi kategori, akun, dan nominal.`, 'error');
+          return;
+        }
+        validItems.push({
+          category_id: Number(row.category_id),
+          account_id: Number(row.account_id),
+          amount: amt,
+          description: row.description || null,
+        });
+      }
+
+      if (validItems.length === 0) {
+        toast('Isi minimal 1 baris transaksi.', 'error');
+        return;
+      }
+
+      loading.value = true;
+      try {
+        const payload = {
+          transaction_date: txForm.transaction_date,
+          items: validItems,
+        };
+        if (isOwner.value) payload.branch_id = Number(txForm.branch_id || user.value.branch_id);
+
+        await api('/transactions/batch', { method: 'POST', body: JSON.stringify(payload) });
+        toast(`${validItems.length} transaksi berhasil dicatat sekaligus!`, 'success');
+
+        txBatchRows.splice(0, txBatchRows.length,
+          { type: 'income', category_id: '', account_id: '', amount: '', description: '' },
+          { type: 'expense', category_id: '', account_id: '', amount: '', description: '' },
+          { type: 'expense', category_id: '', account_id: '', amount: '', description: '' }
+        );
+        await refreshCurrent();
+      } catch (_) {
+      } finally {
+        loading.value = false;
+      }
+    }
+
     async function submitTransferRequest() {
       const amount = parseInputNumber(transferForm.amount);
       if (!amount || !transferForm.to_branch_id || !transferForm.account_id) {
@@ -3731,6 +3800,12 @@ createApp({
       reportForm,
       reportResult,
       txForm,
+      txInputMode,
+      txBatchRows,
+      getCategoriesForType,
+      addTxBatchRow,
+      removeTxBatchRow,
+      submitBatchTransaction,
       txFilter,
       txMeta,
       transferForm,
@@ -4767,8 +4842,16 @@ createApp({
           </div>
 
           <div class="card card-tx-form">
-            <div class="panel-title">Form Transaksi</div>
-            <div class="tx-form">
+            <div class="panel-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+              <span>Form Transaksi</span>
+              <div style="display:flex; gap:6px;">
+                <button type="button" class="btn btn-sm" :class="txInputMode==='single' ? 'btn-primary' : 'btn-outline'" @click="txInputMode='single'">Mode Satuan</button>
+                <button type="button" class="btn btn-sm" :class="txInputMode==='multi' ? 'btn-primary' : 'btn-outline'" @click="txInputMode='multi'">Mode Multi (Banyak Baris)</button>
+              </div>
+            </div>
+
+            <!-- MODE SATUAN -->
+            <div v-if="txInputMode==='single'" class="tx-form">
               <div class="tx-form-top">
                 <div class="field tx-type-field">
                   <label>Tipe</label>
@@ -4817,6 +4900,76 @@ createApp({
                   <textarea rows="2" v-model="txForm.description" placeholder="Catatan singkat…"></textarea>
                 </div>
                 <button class="btn btn-primary btn-tx-save" :disabled="periodLocked || loading" @click="submitTransaction">Simpan Transaksi</button>
+              </div>
+            </div>
+
+            <!-- MODE MULTI -->
+            <div v-else class="tx-form-multi" style="margin-top:12px">
+              <div class="tx-form-top" style="margin-bottom:12px; display:flex; gap:14px; flex-wrap:wrap;">
+                <div class="field" style="flex:1; min-width:180px;">
+                  <label>Tanggal Transaksi</label>
+                  <input type="date" v-model="txForm.transaction_date" style="width:100%; padding:8px; border-radius:6px; border:1px solid #cbd5e1;" />
+                </div>
+                <div v-if="isOwner" class="field" style="flex:1; min-width:180px;">
+                  <label>Cabang</label>
+                  <select v-model="txForm.branch_id" style="width:100%; padding:8px; border-radius:6px; border:1px solid #cbd5e1;">
+                    <option disabled value="">Pilih cabang</option>
+                    <option v-for="b in branches" :key="b.id" :value="b.id">{{ b.name }}</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="table-responsive" style="overflow-x:auto;">
+                <table class="table" style="min-width:700px; width:100%;">
+                  <thead>
+                    <tr>
+                      <th style="width:40px; text-align:center;">#</th>
+                      <th style="width:130px;">Tipe</th>
+                      <th style="width:180px;">Kategori</th>
+                      <th style="width:160px;">Akun</th>
+                      <th style="width:140px;">Nominal</th>
+                      <th>Deskripsi (Opsional)</th>
+                      <th style="width:40px; text-align:center;">Hapus</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(row, idx) in txBatchRows" :key="idx">
+                      <td style="text-align:center; font-weight:600; vertical-align:middle;">{{ idx + 1 }}</td>
+                      <td>
+                        <select v-model="row.type" style="width:100%; padding:6px; border-radius:6px; border:1px solid #cbd5e1;">
+                          <option value="income">Pemasukan</option>
+                          <option value="expense">Pengeluaran</option>
+                        </select>
+                      </td>
+                      <td>
+                        <select v-model="row.category_id" style="width:100%; padding:6px; border-radius:6px; border:1px solid #cbd5e1;">
+                          <option disabled value="">Pilih kategori</option>
+                          <option v-for="c in getCategoriesForType(row.type)" :key="c.id" :value="c.id">{{ c.name }}</option>
+                        </select>
+                      </td>
+                      <td>
+                        <select v-model="row.account_id" style="width:100%; padding:6px; border-radius:6px; border:1px solid #cbd5e1;">
+                          <option disabled value="">Pilih akun</option>
+                          <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
+                        </select>
+                      </td>
+                      <td>
+                        <input :value="row.amount" @input="onAmountInput($event, row)" inputmode="numeric" placeholder="Nominal" style="width:100%; padding:6px; border-radius:6px; border:1px solid #cbd5e1;" />
+                      </td>
+                      <td>
+                        <input v-model="row.description" placeholder="Catatan singkat…" style="width:100%; padding:6px; border-radius:6px; border:1px solid #cbd5e1;" />
+                      </td>
+                      <td style="text-align:center; vertical-align:middle;">
+                        <button type="button" class="btn btn-sm" style="color:#ef4444; border:1px solid #fca5a5; background:none; padding:4px 8px; border-radius:4px; cursor:pointer;" @click="removeTxBatchRow(idx)" title="Hapus baris">✕</button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-top:14px; flex-wrap:wrap; gap:10px;">
+                <button type="button" class="btn btn-outline" @click="addTxBatchRow">+ Tambah Baris Transaksi</button>
+                <button class="btn btn-primary" :disabled="periodLocked || loading" @click="submitBatchTransaction">Simpan Semua Transaksi</button>
               </div>
             </div>
           </div>
