@@ -120,11 +120,17 @@ class AuthController extends Controller
     }
 
     /**
-     * Daftar akun uji dari database — hanya untuk lingkungan local/debug (sementara).
+     * Daftar akun uji dari database — hanya untuk lingkungan non-produksi (development/local).
      */
     public function demoAccounts(): JsonResponse
     {
-// demo accounts enabled for dev
+        if (app()->isProduction() || config('app.env') === 'production') {
+            return response()->json([
+                'message' => 'Akun uji tidak tersedia di lingkungan produksi.',
+                'password_hint' => '',
+                'data' => [],
+            ]);
+        }
 
         $users = User::query()
             ->with('branch:id,name')
