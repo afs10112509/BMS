@@ -195,6 +195,7 @@ createApp({
       q: '',
     });
 
+    const showAddTxForm = ref(false);
     const txInputMode = ref('single');
     const txBatchRows = reactive([
       { type: 'income', category_id: '', account_id: '', amount: '', description: '' },
@@ -3006,6 +3007,7 @@ createApp({
         toast('Transaksi berhasil dicatat.', 'success');
         txForm.amount = '';
         txForm.description = '';
+        showAddTxForm.value = false;
         await refreshCurrent();
       } catch (_) {
       } finally {
@@ -3062,6 +3064,7 @@ createApp({
 
         await api('/transactions/batch', { method: 'POST', body: JSON.stringify(payload) });
         toast(`${validItems.length} transaksi berhasil dicatat sekaligus!`, 'success');
+        showAddTxForm.value = false;
 
         txBatchRows.splice(0, txBatchRows.length,
           { type: 'income', category_id: '', account_id: '', amount: '', description: '' },
@@ -3839,6 +3842,7 @@ createApp({
       reportForm,
       reportResult,
       txForm,
+      showAddTxForm,
       txInputMode,
       txBatchRows,
       getCategoriesForType,
@@ -4881,19 +4885,22 @@ createApp({
 
         <!-- TRANSACTIONS PAGE -->
         <section v-if="page==='transactions'">
-          <div class="page-head">
+          <div class="page-head" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
             <div>
               <h2 class="brand">Transaksi</h2>
-              <p>Catat pemasukan & pengeluaran</p>
+              <p>Catat &amp; kelola pemasukan / pengeluaran</p>
             </div>
+            <button class="btn btn-primary" type="button" @click="showAddTxForm = !showAddTxForm">
+              {{ showAddTxForm ? '✕ Sembunyikan Form' : '+ Tambah Transaksi' }}
+            </button>
           </div>
           <div v-if="periodLocked" class="banner-lock">
             Periode Pembukuan Bulan Ini Telah Dikunci Oleh Owner. Anda Tidak Dapat Menambah atau Mengubah Data.
           </div>
 
-          <div class="card card-tx-form">
+          <div v-if="showAddTxForm" class="card card-tx-form" style="margin-bottom:14px;">
             <div class="panel-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-              <span>Form Transaksi</span>
+              <span>Form Input Transaksi</span>
               <div style="display:flex; gap:6px;">
                 <button type="button" class="btn btn-sm" :class="txInputMode==='single' ? 'btn-primary' : 'btn-outline'" @click="txInputMode='single'">Mode Satuan</button>
                 <button type="button" class="btn btn-sm" :class="txInputMode==='multi' ? 'btn-primary' : 'btn-outline'" @click="txInputMode='multi'">Mode Multi (Banyak Baris)</button>
