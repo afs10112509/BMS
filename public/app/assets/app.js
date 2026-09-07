@@ -97,6 +97,10 @@ const app = createApp({
     const loading = ref(false);
     const dashLoading = ref(false);
     const bootLoading = ref(!!token.value);
+    const sidebarOpen = ref(false);
+    function toggleSidebar() { sidebarOpen.value = !sidebarOpen.value; }
+    function closeSidebar() { sidebarOpen.value = false; }
+    function forceReloadApp() { window.location.reload(); }
     const toasts = ref([]);
     const showPassword = ref(false);
     const navGroups = reactive({
@@ -6951,6 +6955,7 @@ const app = createApp({
       await loadCategories();
       await loadAccounts();
       await ensureBranches();
+      toast('Data berhasil disegarkan.', 'success');
       if (isOwner.value) {
         if (page.value === 'dashboard' || page.value === 'transfers') {
           await loadOwnerDashboard();
@@ -7067,6 +7072,7 @@ const app = createApp({
     }
 
     async function go(next) {
+      closeSidebar();
       if (isEmployeeRole.value) {
         const allowed = ['emp-home', 'emp-history', 'emp-reviews', 'profile'];
         if (isPicWorkshop.value) allowed.push('emp-upah');
@@ -7412,6 +7418,10 @@ const app = createApp({
     onBeforeUnmount(() => destroyCharts());
 
     return {
+      sidebarOpen,
+      toggleSidebar,
+      closeSidebar,
+      forceReloadApp,
       token,
       user,
       page,
@@ -8454,7 +8464,8 @@ const app = createApp({
     </div>
 
     <div v-else class="app-shell">
-      <aside class="sidebar">
+      <div class="sidebar-overlay" :class="{open: sidebarOpen}" @click="closeSidebar"></div>
+      <aside class="sidebar sidebar-drawer" :class="{open: sidebarOpen}">
         <div class="logo brand">BMS</div>
         <div class="logo-sub">Belawa Management System</div>
 
@@ -8701,18 +8712,35 @@ const app = createApp({
 
       <main class="main">
         <header class="topbar">
-          <div class="topbar-user">
-            <div class="avatar" aria-hidden="true">{{ userInitials }}</div>
-            <div class="topbar-meta">
-              <strong>{{ user?.name }}</strong>
-              <span class="role-chip">{{ roleLabel }}</span>
+          <div class="topbar-left">
+            <button class="menu-toggle-btn" type="button" @click="toggleSidebar" title="Buka Menu Navigasi (☰)">
+              <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
+            <div class="topbar-brand">
+              <span class="brand-title">BMS</span>
+              <span class="brand-subtitle">Belawa Management</span>
             </div>
           </div>
-          <div class="topbar-actions">
-            <button v-if="showPwaInstall" class="btn btn-ghost btn-sm" type="button" title="Pasang BMS ke layar utama" @click="installPwaApp">Pasang App</button>
-            <button class="btn btn-ghost btn-sm" type="button" title="Muat ulang aplikasi dari server" @click="hardReloadApp">Muat Ulang</button>
-            <button class="btn btn-ghost btn-sm" type="button" :class="{active: page==='profile'}" @click="go('profile')">Akun</button>
-            <button class="btn btn-ghost btn-sm" type="button" @click="doLogout">Keluar</button>
+          <div class="topbar-right">
+            <div class="topbar-user">
+              <div class="avatar" aria-hidden="true">{{ userInitials }}</div>
+              <div class="topbar-meta">
+                <strong>{{ user?.name }}</strong>
+                <span class="role-chip">{{ roleLabel }}</span>
+              </div>
+            </div>
+            <div class="topbar-actions">
+              <button class="btn btn-ghost btn-sm" type="button" :disabled="loading" @click="refreshCurrent" title="Segarkan Data Halaman Ini">
+                <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="margin-right:3px; vertical-align:-2px;"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                Segarkan
+              </button>
+              <button class="btn btn-ghost btn-sm" type="button" @click="forceReloadApp" title="Muat Ulang Halaman Browser (F5)">
+                🔄 Reload (F5)
+              </button>
+              <button v-if="showPwaInstall" class="btn btn-ghost btn-sm" type="button" title="Pasang BMS ke layar utama" @click="installPwaApp">Pasang App</button>
+              <button class="btn btn-ghost btn-sm" type="button" :class="{active: page==='profile'}" @click="go('profile')">Akun</button>
+              <button class="btn btn-ghost btn-sm" type="button" @click="doLogout">Keluar</button>
+            </div>
           </div>
         </header>
 
