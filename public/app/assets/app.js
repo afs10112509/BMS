@@ -3023,14 +3023,36 @@ createApp({
       txBatchRows.push({ type: 'income', category_id: '', account_id: '', amount: '', description: '' });
     }
 
-    function removeTxBatchRow(idx) {
-      if (txBatchRows.length > 1) {
-        txBatchRows.splice(idx, 1);
+    function onSingleDateChange() {
+      txFilter.date_to = txFilter.date_from;
+      applyTxFilters();
+    }
+
+    async function removeTxBatchRow(idx) {
+      const row = txBatchRows[idx];
+      if (row && row.id) {
+        if (!confirm('Hapus transaksi baris ini dari database?')) return;
+        loading.value = true;
+        try {
+          await api(`/transactions/${row.id}`, { method: 'DELETE' });
+          toast('Baris transaksi dihapus.', 'success');
+          txBatchRows.splice(idx, 1);
+          await refreshCurrent();
+        } catch (_) {
+        } finally {
+          loading.value = false;
+        }
+      } else {
+        if (txBatchRows.length > 1) {
+          txBatchRows.splice(idx, 1);
+        }
       }
     }
 
     async function submitBatchTransaction() {
       const validItems = [];
+      const itemsToCreate = [];
+
       for (let i = 0; i < txBatchRows.length; i++) {
         const row = txBatchRows[i];
         const amt = parseInputNumber(row.amount);
@@ -3042,6 +3064,7 @@ createApp({
           return;
         }
         validItems.push({
+          id: row.id || null,
           category_id: Number(row.category_id),
           account_id: Number(row.account_id),
           amount: amt,
@@ -3056,14 +3079,33 @@ createApp({
 
       loading.value = true;
       try {
-        const payload = {
-          transaction_date: txForm.transaction_date,
-          items: validItems,
-        };
-        if (isOwner.value) payload.branch_id = Number(txForm.branch_id || user.value.branch_id);
+        for (const item of validItems) {
+          if (item.id) {
+            await api(`/transactions/${item.id}`, {
+              method: 'PUT',
+              body: JSON.stringify({
+                category_id: item.category_id,
+                account_id: item.account_id,
+                amount: item.amount,
+                transaction_date: txForm.transaction_date,
+                description: item.description,
+              }),
+            });
+          } else {
+            itemsToCreate.push(item);
+          }
+        }
 
-        await api('/transactions/batch', { method: 'POST', body: JSON.stringify(payload) });
-        toast(`${validItems.length} transaksi berhasil dicatat sekaligus!`, 'success');
+        if (itemsToCreate.length) {
+          const payload = {
+            transaction_date: txForm.transaction_date,
+            items: itemsToCreate,
+          };
+          if (isOwner.value) payload.branch_id = Number(txForm.branch_id || user.value.branch_id);
+          await api('/transactions/batch', { method: 'POST', body: JSON.stringify(payload) });
+        }
+
+        toast(`${validItems.length} transaksi berhasil disimpan!`, 'success');
         showAddTxForm.value = false;
 
         txBatchRows.splice(0, txBatchRows.length,
@@ -3240,14 +3282,114 @@ createApp({
     }
 
     function openEditTx(t) {
-      editTxModal.open = true;
-      editTxModal.id = t.id;
-      editTxModal.type = t.category?.type || 'income';
-      editTxModal.category_id = t.category_id || t.category?.id || '';
-      editTxModal.account_id = t.account_id || t.account?.id || '';
-      editTxModal.amount = formatInputNumber(t.amount);
-      editTxModal.transaction_date = (t.transaction_date || '').toString().slice(0, 10);
-      editTxModal.description = t.description || '';
+      showAddTxForm.value = true;
+      txInputMode.value = 'multi';
+      if (t.transaction_date) {
+        txForm.transaction_date = (t.transaction_date || '').toString().slice(0, 10);
+      }
+      if (t.branch_id) {
+        txForm.branch_id = t.branch_id;
+      }
+      const targetDate = txForm.transaction_date;
+      const targetBranch = txForm.branch_id;
+
+      const dateTxs = transactions.value.filter((item) => {
+        const itemDate = (item.transaction_date || '').toString().slice(0, 10);
+        const itemBranch = item.branch_id ?? item.branch?.id;
+        if (targetBranch) {
+          return itemDate === targetDate && Number(itemBranch) === Number(targetBranch);
+        }
+        return itemDate === targetDate;
+      });
+
+      if (dateTxs.length) {
+        txBatchRows.splice(0, txBatchRows.length, ...dateTxs.map((item) => ({
+          id: item.id,
+          type: item.category?.type || 'income',
+          category_id: item.category_id || item.category?.id || '',
+          account_id: item.account_id || item.account?.id || '',
+          amount: formatInputNumber(item.amount),
+          description: item.description || '',
+        })));
+      } else {
+        txBatchRows.splice(0, txBatchRows.length, {
+          id: t.id,
+          type: t.category?.type || 'income',
+          category_id: t.category_id || t.category?.id || '',
+          account_id: t.account_id || t.account?.id || '',
+          amount: formatInputNumber(t.amount),
+          description: t.description || '',
+        });
+      }
+      scrollMainTop('#form-tx-card');
+      toast('Data transaksi dimuat ke Form Multi Input.', 'success');
+    }
+
+    function buildTxWhatsAppReport() {
+      const dateStr = txFilter.date_from || today();
+      const branchObj = branches.value.find((b) => Number(b.id) === Number(txFilter.branch_id));
+      const branchName = branchObj ? branchObj.name : (user.value?.branch?.name || 'Semua Cabang');
+
+      let totalIncome = 0;
+      let totalExpense = 0;
+      const incomeLines = [];
+      const expenseLines = [];
+
+      transactions.value.forEach((t) => {
+        const amt = Number(t.amount || 0);
+        const type = t.category?.type;
+        const catName = t.category?.name || 'Umum';
+        const desc = t.description ? ` (${t.description})` : '';
+        const itemLine = `• ${catName}: ${formatRp(amt)}${desc}`;
+
+        if (type === 'income') {
+          totalIncome += amt;
+          incomeLines.push(itemLine);
+        } else {
+          totalExpense += amt;
+          expenseLines.push(itemLine);
+        }
+      });
+
+      const net = totalIncome - totalExpense;
+
+      const lines = [
+        `*📊 LAPORAN TRANSAKSI BMS*`,
+        `📍 Cabang: *${branchName}*`,
+        `📅 Tanggal: *${formatDate(dateStr)}*`,
+        ``,
+      ];
+
+      if (incomeLines.length) {
+        lines.push(`*🟢 PEMASUKAN:*`);
+        incomeLines.forEach((l) => lines.push(l));
+        lines.push(`*Total Pemasukan: ${formatRp(totalIncome)}*`);
+        lines.push(``);
+      }
+
+      if (expenseLines.length) {
+        lines.push(`*🔴 PENGELUARAN:*`);
+        expenseLines.forEach((l) => lines.push(l));
+        lines.push(`*Total Pengeluaran: ${formatRp(totalExpense)}*`);
+        lines.push(``);
+      }
+
+      lines.push(`*💰 NET KAS: ${formatRp(net)}*`);
+
+      return lines.join('\n');
+    }
+
+    function shareTxWhatsAppReport() {
+      if (!transactions.value.length) {
+        toast('Tidak ada data transaksi untuk dikirim.', 'error');
+        return;
+      }
+      const text = buildTxWhatsAppReport();
+      const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+      const win = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!win) {
+        toast('Popup diblokir browser. Izinkan popup untuk membuka WhatsApp.', 'error');
+      }
     }
 
     async function submitEditTx() {
@@ -3851,6 +3993,8 @@ createApp({
       submitBatchTransaction,
       refreshCurrent,
       forceReloadApp,
+      onSingleDateChange,
+      shareTxWhatsAppReport,
       txFilter,
       txMeta,
       transferForm,
@@ -5032,45 +5176,27 @@ createApp({
           </div>
 
           <div class="card" style="margin-top:14px">
-            <div class="panel-title">Daftar Transaksi</div>
-            <div class="filter-bar">
-              <div v-if="isOwner" class="field">
+            <div class="panel-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+              <span>Daftar Transaksi</span>
+              <button class="btn btn-sm" style="background:#25D366; color:#fff; font-weight:600; border:none; padding:6px 12px; border-radius:6px; cursor:pointer;" type="button" @click="shareTxWhatsAppReport" title="Kirim Laporan Ringkasan Transaksi ke WhatsApp Group">
+                📲 Kirim Laporan WA
+              </button>
+            </div>
+            <div class="filter-bar" style="margin-top:10px;">
+              <div v-if="isOwner" class="field" style="max-width:200px;">
                 <label>Cabang</label>
                 <select v-model="txFilter.branch_id" @change="applyTxFilters">
                   <option value="">Semua cabang</option>
                   <option v-for="b in branches" :key="b.id" :value="b.id">{{ b.name }}</option>
                 </select>
               </div>
-              <div class="field">
-                <label>Tipe</label>
-                <select v-model="txFilter.type" @change="onTxFilterTypeChange">
-                  <option value="">Semua</option>
-                  <option value="income">Pemasukan</option>
-                  <option value="expense">Pengeluaran</option>
-                </select>
-              </div>
-              <div class="field">
-                <label>Kategori</label>
-                <select v-model="txFilter.category_id" @change="applyTxFilters">
-                  <option value="">Semua kategori</option>
-                  <option v-for="c in filterCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
-                </select>
-              </div>
-              <div class="field">
-                <label>Dari</label>
-                <input type="date" v-model="txFilter.date_from" @change="applyTxFilters" />
-              </div>
-              <div class="field">
-                <label>Sampai</label>
-                <input type="date" v-model="txFilter.date_to" @change="applyTxFilters" />
-              </div>
-              <div class="field field-search">
-                <label>Cari</label>
-                <input v-model="txFilter.q" @input="onTxSearchInput" placeholder="Keterangan atau nominal…" />
+              <div class="field" style="max-width:180px;">
+                <label>Tanggal</label>
+                <input type="date" v-model="txFilter.date_from" @change="onSingleDateChange" />
               </div>
               <div class="field field-actions">
                 <label>&nbsp;</label>
-                <button class="btn btn-ghost" type="button" @click="resetTxFilters">Reset</button>
+                <button class="btn btn-ghost" type="button" @click="resetTxFilters">Hari Ini</button>
               </div>
             </div>
             <div class="filter-meta">{{ txMeta.total }} transaksi ditemukan</div>
