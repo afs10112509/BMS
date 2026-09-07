@@ -3619,67 +3619,74 @@ createApp({
     }
 
     async function refreshCurrent() {
-      await loadCategories();
-      await loadAccounts();
-      await ensureBranches();
-      if (isOwner.value) {
-        if (page.value === 'dashboard' || page.value === 'transfers') {
-          await loadOwnerDashboard();
-          await loadTransfers();
-        }
-        if (page.value === 'locks') await loadPeriodLocks();
-        if (page.value === 'kelola') {
-          await loadAdmins();
-          await loadAllAccounts();
-          await loadBranchTypes();
-          if (accountAssignBranchId.value) {
-            await onBranchSetupChange();
+      loading.value = true;
+      try {
+        await loadCategories();
+        await loadAccounts();
+        await ensureBranches();
+        if (isOwner.value) {
+          if (page.value === 'dashboard' || page.value === 'transfers') {
+            await loadOwnerDashboard();
+            await loadTransfers();
+          }
+          if (page.value === 'locks') await loadPeriodLocks();
+          if (page.value === 'kelola') {
+            await loadAdmins();
+            await loadAllAccounts();
+            await loadBranchTypes();
+            if (accountAssignBranchId.value) {
+              await onBranchSetupChange();
+            }
+          }
+          if (page.value === 'employees') await loadEmployees();
+          if (page.value === 'transactions' && txForm.branch_id) {
+            await loadTxBranchLock(txForm.branch_id);
+          }
+          if (page.value === 'internal-transfer' && internalTransferForm.branch_id) {
+            await loadTxBranchLock(internalTransferForm.branch_id);
           }
         }
-        if (page.value === 'employees') await loadEmployees();
-        if (page.value === 'transactions' && txForm.branch_id) {
-          await loadTxBranchLock(txForm.branch_id);
+        if (page.value === 'services') await loadServiceRecords();
+        if (page.value === 'closings') await loadClosingBoard();
+        if (page.value === 'attendance') {
+          if (attendanceTab.value === 'daily') await loadAttendanceDaily();
+          else await loadAttendanceBoard();
         }
-        if (page.value === 'internal-transfer' && internalTransferForm.branch_id) {
-          await loadTxBranchLock(internalTransferForm.branch_id);
+        if (page.value === 'payroll') await loadPayrollBoard();
+        if (page.value === 'workshop-wages') await loadWorkshopWagePage();
+        if (page.value === 'recon') {
+          if (isOwner.value && reconForm.branch_id) {
+            await loadAccounts(reconForm.branch_id);
+            await loadBranchDashboard(reconForm.branch_id, reconForm.reconciliation_date);
+          } else if (isAdmin.value) {
+            await loadAccounts(user.value?.branch_id);
+            await loadBranchDashboard(null, reconForm.reconciliation_date);
+          }
         }
-      }
-      // Admin & Owner: daftar servis + opsi teknisi (sebelumnya hanya Owner → dropdown admin kosong)
-      if (page.value === 'services') await loadServiceRecords();
-      if (page.value === 'closings') await loadClosingBoard();
-      if (page.value === 'attendance') {
-        if (attendanceTab.value === 'daily') await loadAttendanceDaily();
-        else await loadAttendanceBoard();
-      }
-      if (page.value === 'payroll') await loadPayrollBoard();
-      if (page.value === 'workshop-wages') await loadWorkshopWagePage();
-      if (page.value === 'recon') {
-        if (isOwner.value && reconForm.branch_id) {
-          await loadAccounts(reconForm.branch_id);
-          await loadBranchDashboard(reconForm.branch_id, reconForm.reconciliation_date);
-        } else if (isAdmin.value) {
-          await loadAccounts(user.value?.branch_id);
-          await loadBranchDashboard(null, reconForm.reconciliation_date);
+        if (isAdmin.value) {
+          if (['dashboard', 'transactions', 'internal-transfer', 'adjustments'].includes(page.value)) {
+            await loadBranchDashboard();
+          }
+          if (page.value === 'branch-accounts') {
+            await loadAccounts(user.value?.branch_id);
+            await loadOpeningBalances(user.value?.branch_id);
+            resetAccountForm();
+          }
+          if (page.value === 'branch-categories') {
+            resetCategoryForm();
+          }
         }
-      }
-      if (isAdmin.value) {
-        if (['dashboard', 'transactions', 'internal-transfer', 'adjustments'].includes(page.value)) {
-          await loadBranchDashboard();
+        if (page.value === 'transactions') await loadTransactions();
+        if (page.value === 'reports') {
+          if (isAdmin.value && !reportForm.branch_id && user.value?.branch_id) {
+            reportForm.branch_id = user.value.branch_id;
+          }
         }
-        if (page.value === 'branch-accounts') {
-          await loadAccounts(user.value?.branch_id);
-          await loadOpeningBalances(user.value?.branch_id);
-          resetAccountForm();
-        }
-        if (page.value === 'branch-categories') {
-          resetCategoryForm();
-        }
-      }
-      if (page.value === 'transactions') await loadTransactions();
-      if (page.value === 'reports') {
-        if (isAdmin.value && !reportForm.branch_id && user.value?.branch_id) {
-          reportForm.branch_id = user.value.branch_id;
-        }
+        toast('Data berhasil disegarkan.', 'success');
+      } catch (err) {
+        console.error('Refresh error:', err);
+      } finally {
+        loading.value = false;
       }
     }
 
