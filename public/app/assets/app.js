@@ -2767,7 +2767,8 @@ createApp({
 
     async function loadServiceRecords() {
       const data = await api(`/service-records${buildServiceQuery()}`);
-      serviceRecords.value = data.data || [];
+      const raw = data.data;
+      serviceRecords.value = Array.isArray(raw) ? raw : (raw?.data || []);
       serviceSummary.value = data.summary || { jumlah: 0, total_modal: 0, total_harga: 0, total_profit: 0 };
       await loadServiceTechnicians();
     }
