@@ -215,8 +215,9 @@ createApp({
     const txFilter = reactive({
       type: '',
       category_id: '',
-      date_from: '',
-      date_to: '',
+      branch_id: '',
+      date_from: today(),
+      date_to: today(),
       q: '',
     });
     const txMeta = ref({ total: 0, current_page: 1, last_page: 1, per_page: 20 });
@@ -1437,7 +1438,11 @@ createApp({
       const params = new URLSearchParams();
       params.set('per_page', '20');
       params.set('page', String(pageNum));
-      if (isOwner.value && txForm.branch_id) params.set('branch_id', String(txForm.branch_id));
+      if (txFilter.branch_id) {
+        params.set('branch_id', String(txFilter.branch_id));
+      } else if (isOwner.value && txForm.branch_id) {
+        params.set('branch_id', String(txForm.branch_id));
+      }
       if (txFilter.type) params.set('type', txFilter.type);
       if (txFilter.category_id) params.set('category_id', String(txFilter.category_id));
       if (txFilter.date_from) params.set('date_from', txFilter.date_from);
@@ -1470,8 +1475,9 @@ createApp({
     function resetTxFilters() {
       txFilter.type = '';
       txFilter.category_id = '';
-      txFilter.date_from = '';
-      txFilter.date_to = '';
+      txFilter.branch_id = '';
+      txFilter.date_from = today();
+      txFilter.date_to = today();
       txFilter.q = '';
       loadTransactions(1);
     }
@@ -4982,6 +4988,13 @@ createApp({
           <div class="card" style="margin-top:14px">
             <div class="panel-title">Daftar Transaksi</div>
             <div class="filter-bar">
+              <div v-if="isOwner" class="field">
+                <label>Cabang</label>
+                <select v-model="txFilter.branch_id" @change="applyTxFilters">
+                  <option value="">Semua cabang</option>
+                  <option v-for="b in branches" :key="b.id" :value="b.id">{{ b.name }}</option>
+                </select>
+              </div>
               <div class="field">
                 <label>Tipe</label>
                 <select v-model="txFilter.type" @change="onTxFilterTypeChange">
