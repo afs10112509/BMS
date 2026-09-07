@@ -3274,6 +3274,21 @@ createApp({
       }
     }
 
+    async function confirmDeleteFromEditModal() {
+      if (!editTxModal.id) return;
+      if (!confirm('Apakah Anda yakin ingin menghapus transaksi ini?')) return;
+      loading.value = true;
+      try {
+        await api(`/transactions/${editTxModal.id}`, { method: 'DELETE' });
+        toast('Transaksi berhasil dihapus.', 'success');
+        editTxModal.open = false;
+        await refreshCurrent();
+      } catch (_) {
+      } finally {
+        loading.value = false;
+      }
+    }
+
     async function deleteTransaction(id) {
       if (!window.confirm('Hapus transaksi ini?')) return;
       loading.value = true;
@@ -3929,6 +3944,7 @@ createApp({
       confirmReject,
       openEditTx,
       submitEditTx,
+      confirmDeleteFromEditModal,
       deleteTransaction,
       submitInternalTransfer,
       submitAdjustment,
@@ -5084,7 +5100,6 @@ createApp({
                     <td v-if="isOwner" class="col-audit" :class="{'col-empty': !(t.updated_by?.name || t.updatedBy?.name)}">{{ (t.updated_by?.name || t.updatedBy?.name) ? formatDateTime(t.updated_at) : '—' }}</td>
                     <td v-if="!periodLocked">
                       <button class="btn btn-ghost btn-sm" @click="openEditTx(t)">Edit</button>
-                      <button class="btn btn-danger btn-sm" @click="deleteTransaction(t.id)">Hapus</button>
                     </td>
                   </tr>
                   <tr v-if="!transactions.length">
@@ -7513,9 +7528,12 @@ createApp({
             <textarea rows="2" v-model="editTxModal.description"></textarea>
           </div>
         </div>
-        <div class="modal-actions">
-          <button class="btn btn-ghost" @click="editTxModal.open=false">Batal</button>
-          <button class="btn btn-primary" @click="submitEditTx">Simpan</button>
+        <div class="modal-actions" style="display:flex; justify-content:space-between; align-items:center;">
+          <button class="btn btn-danger" type="button" @click="confirmDeleteFromEditModal">Hapus Transaksi Ini</button>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-ghost" @click="editTxModal.open=false">Batal</button>
+            <button class="btn btn-primary" @click="submitEditTx">Simpan Perubahan</button>
+          </div>
         </div>
       </div>
     </div>
