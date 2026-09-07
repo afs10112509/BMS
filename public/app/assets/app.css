@@ -226,12 +226,6 @@ a { color: inherit; text-decoration: none; }
 .field { margin-bottom: 14px; }
 .field label { display: block; font-size: .85rem; font-weight: 700; margin-bottom: 6px; }
 .field label .opt { font-weight: 500; color: var(--muted); font-size: .78rem; }
-.field small {
-  display: block;
-  margin-top: 4px;
-  color: var(--muted);
-  font-size: .78rem;
-}
 .field input, .field select, .field textarea {
   width: 100%;
   border: 1px solid var(--line);
@@ -272,7 +266,7 @@ a { color: inherit; text-decoration: none; }
   filter: none;
 }
 
-/* Karyawan ? daftar direktori */
+/* Karyawan — daftar direktori */
 .emp-list-card { padding-top: 18px; }
 .emp-list-head {
   display: flex;
@@ -421,183 +415,63 @@ a { color: inherit; text-decoration: none; }
   font-size: .75rem; color: #115E59;
 }
 
-/* ==========================================
-   DESKTOP & MOBILE RESPONSIVE SIDEBAR (9router Model)
-   ========================================== */
-
-/* Layout Shell Default (Mobile First) */
+/* SHELL — satu kerangka viewport, sidebar tetap, konten scroll di dalam */
 .app-shell {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   width: 100%;
   max-width: 100%;
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
-  position: relative;
 }
-
-/* 1. LAYAR BESAR / DESKTOP ( >= 1024px ) */
-@media (min-width: 1024px) {
-  .app-shell {
-    display: grid !important;
-    grid-template-columns: 260px minmax(0, 1fr) !important;
-    grid-template-rows: minmax(0, 1fr) !important;
-  }
-
-  /* Sidebar Tampil Permanen di Sisi Kiri (Docked) */
-  .sidebar-drawer {
-    position: relative !important;
-    transform: none !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    height: 100% !important;
-    box-shadow: none !important;
-    border-right: 1px solid rgba(255, 255, 255, 0.12) !important;
-    z-index: 10 !important;
-  }
-
-  /* Tombol 3 Baris Bersusun (☰) OTOMATIS HILANG di Layar Besar */
-  .menu-toggle-btn {
-    display: none !important;
-  }
-
-  /* Tombol Tutup (✕) Hilang di Desktop */
-  .drawer-close-btn {
-    display: none !important;
-  }
-
-  /* Backdrop Overlay Hilang di Desktop */
-  .sidebar-backdrop {
-    display: none !important;
-  }
-}
-
-/* 2. LAYAR KECIL / MOBILE (< 1024px) */
-@media (max-width: 1023px) {
-  .app-shell {
-    display: flex !important;
-    flex-direction: column !important;
-  }
-
-  /* Tombol 3 Baris Bersusun (☰) TAMPIL di Mobile */
-  .menu-toggle-btn {
-    display: flex !important;
-  }
-
-  .drawer-close-btn {
-    display: flex !important;
-  }
-}
-
-/* Drawer Sidebar Styling (9router Model) */
-.sidebar-drawer {
-  position: fixed;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 250px;
-  max-width: 86vw;
+.sidebar {
   height: 100%;
-  z-index: 99999;
-  background: #0F766E;
-  background: linear-gradient(180deg, #115E59 0%, #0F766E 60%, #134E4A 100%);
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: linear-gradient(180deg, #134E4A, #115E59);
   color: #fff;
-  padding: 14px 10px 20px;
+  padding: 18px 12px;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  overflow-y: auto;
-  transform: translateX(-100%);
-  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 8px 0 32px rgba(0, 0, 0, 0.35);
 }
-
-.sidebar-drawer.open {
-  transform: translateX(0);
+.sidebar .logo { font-size: 1.45rem; margin: 0 6px 2px; }
+.sidebar .logo-sub { color: rgba(255,255,255,.65); font-size: .7rem; margin: 0 6px 12px; }
+.nav-group { display: grid; gap: 1px; margin-bottom: 8px; }
+.nav-group-toggle {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; border: 0; background: transparent; color: rgba(255,255,255,.5);
+  padding: 8px 10px 6px; font-size: .65rem; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; cursor: pointer; text-align: left;
 }
-
-.drawer-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 8px 12px 8px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+.nav-group-toggle:hover { color: rgba(255,255,255,.9); }
+.nav-group-toggle .chev {
+  width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent;
+  border-top: 5px solid currentColor; transition: transform .18s ease; opacity: .8;
 }
-
-.drawer-header .logo {
-  font-family: 'Fraunces', serif;
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: #fff;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-}
-
-.drawer-header .logo-sub {
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 0.65rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-top: 2px;
-}
-
-.drawer-close-btn {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #fff;
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.9rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.drawer-close-btn:hover {
-  background: rgba(255, 255, 255, 0.25);
-}
-
-/* Category Section Titles (Static Label Model like 9router SYSTEM Header) */
-.nav-section { display: grid; gap: 2px; margin-bottom: 12px; }
-.nav-section-title {
-  color: rgba(255, 255, 255, 0.45);
-  padding: 10px 10px 4px 10px;
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  user-select: none;
-}
-
-/* Menu Item Rows */
-.nav-group-items { display: grid; gap: 2px; padding-left: 2px; }
+.nav-group-toggle.open .chev { transform: rotate(180deg); }
+.nav-group-items { display: grid; gap: 2px; }
 .nav-btn {
   display: flex; align-items: center; gap: 10px;
-  text-align: left; border: 0; background: transparent; color: rgba(255, 255, 255, 0.82);
-  padding: 8px 10px; border-radius: 6px; cursor: pointer; font-weight: 500; font-size: 0.84rem;
-  transition: all 0.15s ease;
-  line-height: 1.2;
+  text-align: left; border: 0; background: transparent; color: rgba(255,255,255,.86);
+  padding: 9px 10px; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: .88rem;
+  transition: background .15s ease, color .15s ease;
 }
 .nav-btn .nav-ico {
-  width: 18px; height: 18px; flex-shrink: 0; opacity: 0.75;
+  width: 18px; height: 18px; flex-shrink: 0; opacity: .75;
   stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
 }
-.nav-btn:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+.nav-btn:hover { background: rgba(255,255,255,.1); color: #fff; }
 .nav-btn:hover .nav-ico { opacity: 1; }
 .nav-btn.active {
-  background: rgba(255, 255, 255, 0.16);
+  background: rgba(255,255,255,.16);
   color: #fff;
-  font-weight: 600;
   box-shadow: inset 3px 0 0 #5EEAD4;
 }
-.nav-btn.active .nav-ico { opacity: 1; stroke-width: 2.2; }
+.nav-btn.active .nav-ico { opacity: 1; }
 .main {
   min-width: 0;
   min-height: 0;
@@ -617,60 +491,12 @@ a { color: inherit; text-decoration: none; }
   z-index: 15;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
   margin: 0;
-  padding: 10px 18px;
-  background: rgba(255, 255, 255, 0.96);
-  backdrop-filter: blur(8px);
+  padding: 14px 24px;
+  background: rgba(248, 250, 252, 0.96);
   border-bottom: 1px solid var(--line);
-}
-.topbar-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.topbar-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.menu-toggle-btn {
-  background: transparent;
-  border: 1px solid rgba(15, 118, 110, 0.25);
-  color: #0F766E;
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.menu-toggle-btn:hover, .menu-toggle-btn:active {
-  background: #F0FDFA;
-  border-color: #0F766E;
-  color: #0D9488;
-}
-.topbar-brand {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.1;
-}
-.topbar-brand .brand-title {
-  font-family: 'Fraunces', serif;
-  font-weight: 700;
-  font-size: 1.25rem;
-  color: #0F766E;
-  letter-spacing: -0.02em;
-}
-.topbar-brand .brand-subtitle {
-  font-size: 0.65rem;
-  font-weight: 600;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 .main-scroll {
   flex: 1 1 0;
@@ -839,7 +665,7 @@ th {
   text-transform: uppercase;
   letter-spacing: .04em;
 }
-/* Jangan biarkan kolom kosong (?) melebar memenuhi sisa lebar layar */
+/* Jangan biarkan kolom kosong (—) melebar memenuhi sisa lebar layar */
 td:empty,
 td.col-empty {
   width: 1%;
@@ -917,7 +743,7 @@ tfoot td { background: #F8FAFC; border-top: 2px solid var(--line); font-weight: 
 .form-grid { display: grid; gap: 12px; max-width: 100%; }
 .form-grid input, .form-grid select, .form-grid textarea { max-width: 100%; }
 
-/* Transaction form ? comfortable layout */
+/* Transaction form — comfortable layout */
 .report-type-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -990,20 +816,6 @@ tfoot td { background: #F8FAFC; border-top: 2px solid var(--line); font-weight: 
   align-items: end;
 }
 .tx-draft-wrap { margin-top: 4px; }
-.tx-draft-table,
-.ww-draft-table {
-  width: 100%;
-  min-width: 100%;
-  max-width: 100%;
-  table-layout: fixed;
-}
-.tx-draft-table th,
-.tx-draft-table td,
-.ww-draft-table th,
-.ww-draft-table td {
-  overflow: hidden;
-  vertical-align: middle;
-}
 .svc-draft-table th { white-space: nowrap; }
 .svc-draft-table td:nth-child(8) { min-width: 88px; }
 @media (max-width: 900px) {
@@ -1011,11 +823,8 @@ tfoot td { background: #F8FAFC; border-top: 2px solid var(--line); font-weight: 
   .svc-draft-table td:nth-child(9) { display: none; }
 }
 .tx-draft-table input,
-.tx-draft-table select,
-.ww-draft-table input,
-.ww-draft-table select {
+.tx-draft-table select {
   width: 100%;
-  max-width: 100%;
   min-width: 0;
   padding: 8px 10px;
   border: 1px solid var(--line);
@@ -1023,18 +832,6 @@ tfoot td { background: #F8FAFC; border-top: 2px solid var(--line); font-weight: 
   background: #fff;
   font: inherit;
 }
-.tx-draft-table-tx th:nth-child(1),
-.tx-draft-table-tx td:nth-child(1) { width: 40px; }
-.tx-draft-table-tx th:nth-child(2),
-.tx-draft-table-tx td:nth-child(2) { width: 128px; }
-.tx-draft-table-tx th:nth-child(3),
-.tx-draft-table-tx td:nth-child(3) { width: 26%; }
-.tx-draft-table-tx th:nth-child(4),
-.tx-draft-table-tx td:nth-child(4) { width: 132px; }
-.tx-draft-table-tx th:nth-child(5),
-.tx-draft-table-tx td:nth-child(5) { width: 140px; }
-.tx-draft-table-tx th:nth-child(7),
-.tx-draft-table-tx td:nth-child(7) { width: 76px; }
 .tx-draft-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1248,16 +1045,6 @@ tfoot td { background: #F8FAFC; border-top: 2px solid var(--line); font-weight: 
 .filter-bar .field { margin-bottom: 0; }
 .filter-bar .field-search { min-width: 180px; }
 .filter-bar .field-actions { display: flex; flex-direction: column; justify-content: flex-end; }
-.filter-actions-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-.filter-actions-row .btn { width: auto; }
-.tx-filter-bar .field-actions { min-width: 168px; }
-.tx-day-rows table { font-size: .84rem; }
-.tx-day-rows th, .tx-day-rows td { padding: 8px 10px; }
 .filter-bar.payroll-filter-bar {
   display: flex;
   flex-wrap: wrap;
@@ -1434,7 +1221,7 @@ tfoot td { background: #F8FAFC; border-top: 2px solid var(--line); font-weight: 
 }
 .tab-btn.active { background: #ECFDF5; border-color: var(--income); color: #047857; }
 
-/* Kelola ? master data */
+/* Kelola — master data */
 .kelola-page { display: flex; flex-direction: column; gap: 0; }
 .kelola-head { margin-bottom: 4px; }
 .kelola-tabs {
@@ -1685,8 +1472,6 @@ tfoot td { background: #F8FAFC; border-top: 2px solid var(--line); font-weight: 
   .tx-form-bottom { grid-template-columns: 1fr; }
   .btn-tx-save { width: 100%; }
   .filter-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .tx-filter-bar .field-actions { grid-column: 1 / -1; min-width: 0; }
-  .tx-filter-bar .filter-actions-row .btn { flex: 1 1 auto; }
   .filter-bar.payroll-filter-bar {
     flex-direction: column;
     align-items: stretch;
@@ -1896,7 +1681,7 @@ tfoot td { background: #F8FAFC; border-top: 2px solid var(--line); font-weight: 
 }
 .link-btn:hover { opacity: .85; }
 
-/* Laporan Closing ? capaian */
+/* Laporan Closing — capaian */
 .report-kpi-row {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2028,29 +1813,12 @@ tfoot td { background: #F8FAFC; border-top: 2px solid var(--line); font-weight: 
 .att-board-select:disabled { opacity: .6; cursor: wait; }
 
 /* Payroll */
-.payroll-board { min-width: 1480px; table-layout: fixed; width: max-content; }
+.payroll-board { min-width: 980px; }
 .payroll-board th {
   white-space: nowrap;
   font-size: .72rem;
   letter-spacing: .02em;
 }
-.payroll-board th,
-.payroll-board td {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  vertical-align: middle;
-}
-.payroll-col-name { width: 148px; }
-.payroll-col-branch { width: 118px; }
-.payroll-col-pos { width: 96px; }
-.payroll-col-hadir { width: 52px; }
-.payroll-col-num { width: 118px; }
-.payroll-col-pic { width: 122px; }
-.payroll-col-qty { width: 48px; }
-.payroll-col-money { width: 96px; }
-.payroll-col-total { width: 112px; }
-.payroll-col-status { width: 78px; }
-.payroll-col-aksi { width: 150px; }
 .payroll-row-actions {
   display: inline-flex;
   flex-direction: row;
@@ -2067,8 +1835,7 @@ tfoot td { background: #F8FAFC; border-top: 2px solid var(--line); font-weight: 
   display: flex;
   align-items: center;
   gap: 4px;
-  min-width: 0;
-  width: 100%;
+  min-width: 110px;
 }
 .payroll-pic-cell .payroll-cell { flex: 1; min-width: 0; }
 .btn-xs {
@@ -2079,16 +1846,13 @@ tfoot td { background: #F8FAFC; border-top: 2px solid var(--line); font-weight: 
   white-space: nowrap;
 }
 .payroll-cell {
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
+  width: 88px;
   padding: 4px 6px;
   border: 1px solid var(--line);
   border-radius: 6px;
   text-align: right;
   background: #F8FAFC;
   font-size: .78rem;
-  box-sizing: border-box;
 }
 .payroll-cell:focus { outline: 2px solid rgba(15,118,110,.3); background: #fff; }
 .payroll-cell:disabled { opacity: .65; cursor: not-allowed; }
@@ -2232,7 +1996,7 @@ tfoot td { background: #F8FAFC; border-top: 2px solid var(--line); font-weight: 
   border-color: #99F6E4 !important;
 }
 
-/* Upah Bengkel ? input harian multi */
+/* Upah Bengkel — input harian multi */
 .ww-daily { display: grid; gap: 18px; margin-top: 8px; }
 .ww-daily-step {
   padding: 14px 14px 16px;
@@ -2265,8 +2029,7 @@ tfoot td { background: #F8FAFC; border-top: 2px solid var(--line); font-weight: 
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  justify-content: flex-start;
-  flex: 1 1 100%;
+  justify-content: flex-end;
   max-width: 100%;
 }
 .ww-chip {
@@ -2286,7 +2049,6 @@ tfoot td { background: #F8FAFC; border-top: 2px solid var(--line); font-weight: 
 .ww-edit-grid input,
 .ww-edit-grid select {
   width: 100%;
-  max-width: 100%;
   min-width: 0;
   padding: 8px 10px;
   border: 1px solid var(--line);
@@ -2295,16 +2057,6 @@ tfoot td { background: #F8FAFC; border-top: 2px solid var(--line); font-weight: 
   font: inherit;
 }
 .ww-draft-table th { white-space: nowrap; }
-.ww-draft-table th:nth-child(1),
-.ww-draft-table td:nth-child(1) { width: 40px; }
-.ww-draft-table th:nth-child(2),
-.ww-draft-table td:nth-child(2) { width: 28%; }
-.ww-draft-table th:nth-child(3),
-.ww-draft-table td:nth-child(3) { width: 22%; }
-.ww-draft-table th:nth-child(4),
-.ww-draft-table td:nth-child(4) { width: 140px; }
-.ww-draft-table th:nth-child(6),
-.ww-draft-table td:nth-child(6) { width: 76px; }
 .ww-daily-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2344,7 +2096,7 @@ tfoot td { background: #F8FAFC; border-top: 2px solid var(--line); font-weight: 
   .ww-draft-table td:nth-child(5) { display: none; }
 }
 
-/* Absensi mandiri karyawan ? mobile-first, tanpa sidebar staf */
+/* Absensi mandiri karyawan — mobile-first, tanpa sidebar staf */
 .emp-app {
   display: flex;
   flex-direction: column;
@@ -2558,7 +2310,7 @@ tfoot td { background: #F8FAFC; border-top: 2px solid var(--line); font-weight: 
   border: 1px solid rgba(15, 118, 110, 0.08);
 }
 
-/* ?? Backup & Restore (Owner) ?? */
+/* �� Backup & Restore (Owner) �� */
 .db-backup-page { display: grid; gap: 16px; }
 .db-backup-page .page-head { margin-bottom: 0; }
 .db-muted {
@@ -2667,326 +2419,3 @@ tfoot td { background: #F8FAFC; border-top: 2px solid var(--line); font-weight: 
   .db-schedule-main { align-items: stretch; }
   .db-btn-inline { width: 100% !important; }
 }
-
-.reminder-card .reminder-positions {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid rgba(15, 118, 110, 0.1);
-}
-.reminder-card .reminder-positions > label {
-  display: block;
-  font-weight: 700;
-  font-size: .86rem;
-  margin-bottom: 4px;
-}
-.reminder-card .reminder-positions .db-muted { margin-bottom: 10px; }
-.reminder-card .position-pill:disabled {
-  opacity: .65;
-  cursor: not-allowed;
-}
-.reminder-webhook {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid rgba(15, 118, 110, 0.1);
-}
-.reminder-webhook > label {
-  display: block;
-  font-weight: 700;
-  font-size: .86rem;
-  margin-bottom: 4px;
-}
-.reminder-webhook .db-muted { margin-bottom: 8px; }
-.reminder-webhook-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-.reminder-webhook-url {
-  flex: 1 1 220px;
-  font-size: .8rem;
-  background: #F8FAFC;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 8px 10px;
-  color: #0F172A;
-  word-break: break-all;
-}
-
-/* ?? Form Data Karyawan (sectioned) ?? */
-.emp-form-card { display: grid; gap: 14px; }
-.emp-form-section {
-  border: 1px solid rgba(15, 23, 42, 0.06);
-  border-radius: 14px;
-  background: #F8FAFC;
-  padding: 14px;
-}
-.emp-form-section-title {
-  font-size: .78rem;
-  font-weight: 700;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: var(--brand-deep);
-  margin: 0 0 12px;
-}
-.emp-form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-.emp-form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-@media (max-width: 720px) {
-  .emp-form-grid { grid-template-columns: 1fr; }
-}
-
-
-.emp-form-modal {
-  width: min(760px, 96vw);
-  max-height: min(92vh, 900px);
-  padding: 16px 18px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.emp-form-modal-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-shrink: 0;
-}
-.emp-form-modal-head h3 { margin: 0; }
-.emp-form-modal-body {
-  overflow: auto;
-  flex: 1 1 auto;
-  padding-right: 2px;
-}
-.emp-form-modal .modal-actions {
-  margin-top: 0;
-  flex-shrink: 0;
-  padding-top: 4px;
-  border-top: 1px solid rgba(15, 23, 42, 0.06);
-}
-@media (max-width: 720px) {
-  .emp-form-modal { width: 100%; max-height: 96vh; padding: 12px; }
-}
-
-
-/* POS & INVENTORY STYLES */
-.pos-layout {
-  display: grid;
-  grid-template-columns: 1fr 380px;
-  gap: 16px;
-  align-items: start;
-}
-@media (max-width: 900px) {
-  .pos-layout { grid-template-columns: 1fr; }
-}
-
-.pos-catalog {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 12px;
-  margin-top: 12px;
-}
-
-.pos-card {
-  background: #ffffff;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
-  padding: 12px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-.pos-card:hover {
-  border-color: #0F766E;
-  box-shadow: 0 4px 12px rgba(15, 118, 110, 0.12);
-  transform: translateY(-2px);
-}
-
-.pos-card-sku {
-  font-size: 0.75rem;
-  color: #64748B;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-
-.pos-card-title {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #1E293B;
-  margin: 4px 0;
-}
-
-.pos-card-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 8px;
-}
-
-.pos-card-price {
-  font-weight: 700;
-  color: #0F766E;
-  font-size: 0.95rem;
-}
-
-.pos-card-stock {
-  font-size: 0.75rem;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-weight: 600;
-}
-.stock-ok { background: #DCFCE7; color: #166534; }
-.stock-low { background: #FEF08A; color: #854D0E; }
-.stock-zero { background: #FEE2E2; color: #991B1B; }
-
-.pos-cart-panel {
-  background: #ffffff;
-  border: 1px solid #E2E8F0;
-  border-radius: 10px;
-  padding: 16px;
-  position: sticky;
-  top: 16px;
-}
-
-.pos-cart-list {
-  max-height: 280px;
-  overflow-y: auto;
-  margin: 12px 0;
-  border-top: 1px solid #F1F5F9;
-  border-bottom: 1px solid #F1F5F9;
-}
-
-.pos-cart-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 0;
-  border-bottom: 1px dashed #F1F5F9;
-}
-
-.qty-control {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.qty-btn {
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
-  border: 1px solid #CBD5E1;
-  background: #F8FAFC;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-
-.receipt-modal {
-  font-family: 'Courier New', Courier, monospace;
-  max-width: 380px;
-  margin: 0 auto;
-  padding: 16px;
-  background: #fff;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
-}
-
-@media print {
-  body * { visibility: hidden; }
-  .receipt-modal, .receipt-modal * { visibility: visible; }
-  .receipt-modal { position: absolute; left: 0; top: 0; width: 100%; }
-  .modal-backdrop { background: none; }
-  .modal-actions { display: none; }
-}
-
-/* ==========================================
-   MOBILE & PWA OPTIMIZATIONS (bms-dev)
-   Native BMS Design System (#0F766E, #F0FDFA)
-   ========================================== */
-
-@media (max-width: 768px) {
-  .app-shell {
-    grid-template-columns: 1fr !important;
-    grid-template-rows: auto 1fr !important;
-  }
-
-  .sidebar {
-    padding: 10px 14px !important;
-    gap: 8px !important;
-    overflow-x: auto !important;
-    background: #0F766E !important;
-  }
-
-  .sidebar .logo-sub {
-    display: none !important;
-  }
-
-  .pos-layout {
-    grid-template-columns: 1fr !important;
-    gap: 14px !important;
-  }
-
-  .pos-catalog {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 10px !important;
-  }
-
-  .pos-card {
-    padding: 12px !important;
-    border-radius: 10px !important;
-    background: #FFFFFF !important;
-    border: 1px solid #E2E8F0 !important;
-  }
-
-  .pos-card-name {
-    font-size: 0.9rem !important;
-    font-weight: 600 !important;
-  }
-
-  .pos-card-price {
-    font-size: 0.95rem !important;
-    color: #0F766E !important;
-    font-weight: 700 !important;
-  }
-
-  .pos-cart-panel {
-    position: static !important;
-    border-radius: 12px !important;
-    box-shadow: 0 4px 12px rgba(15, 118, 110, 0.08) !important;
-  }
-
-  .btn, .input, select, input[type=text], input[type=number], input[type=search] {
-    min-height: 46px !important;
-    font-size: 0.95rem !important;
-    border-radius: 8px !important;
-  }
-
-  .qty-btn {
-    width: 38px !important;
-    height: 38px !important;
-    font-size: 1.2rem !important;
-    border-radius: 6px !important;
-  }
-
-  .field-label, label {
-    font-weight: 600 !important;
-    font-size: 0.85rem !important;
-    margin-bottom: 4px !important;
-  }
-}
-
-/* ==========================================
-   OFF-CANVAS DRAWER SIDEBAR (9router Model)
-   ========================================== */
-

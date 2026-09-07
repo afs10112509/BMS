@@ -19,8 +19,7 @@ class AuthController extends Controller
             'password' => ['required', 'string'],
         ]);
 
-        $email = strtolower(trim($credentials['email']));
-        $user = User::query()->whereRaw('LOWER(email) = ?', [$email])->first();
+        $user = User::query()->where('email', $credentials['email'])->first();
 
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {
             throw ValidationException::withMessages([
@@ -121,16 +120,12 @@ class AuthController extends Controller
     }
 
     /**
-     * Daftar akun uji dari database — hanya untuk lingkungan non-produksi (development/local).
+     * Daftar akun uji dari database — hanya untuk lingkungan local/debug (sementara).
      */
-    public function demoAccounts(Request $request): JsonResponse
+    public function demoAccounts(): JsonResponse
     {
-        if (app()->isProduction() || config('app.env') === 'production' || str_contains($request->getHost(), 'bms.adbr.my.id')) {
-            return response()->json([
-                'message' => 'Akun uji tidak tersedia di lingkungan produksi.',
-                'password_hint' => '',
-                'data' => [],
-            ]);
+        if (! app()->environment('local') && ! config('app.debug')) {
+            return response()->json(['message' => 'Tidak tersedia.'], 404);
         }
 
         $users = User::query()
