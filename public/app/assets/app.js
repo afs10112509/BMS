@@ -95,7 +95,7 @@ createApp({
 
     const loginForm = reactive({ email: '', password: '', remember: false });
     const demoAccounts = ref([]);
-    const demoPasswordHint = ref('password');
+    const demoPasswordHint = ref('');
     const loginError = ref('');
 
     const profileForm = reactive({
@@ -910,11 +910,13 @@ createApp({
       try {
         const data = await api('/auth/demo-accounts');
         demoAccounts.value = data.data || [];
-        demoPasswordHint.value = data.password_hint || 'password';
+        demoPasswordHint.value = data.password_hint !== undefined ? data.password_hint : '';
         if (!loginForm.email && demoAccounts.value.length) {
           const owner = demoAccounts.value.find((a) => a.role === 'owner') || demoAccounts.value[0];
-          loginForm.email = owner.email;
-          loginForm.password = demoPasswordHint.value;
+          if (owner) {
+            loginForm.email = owner.email;
+            loginForm.password = demoPasswordHint.value;
+          }
         }
       } catch (_) {
         demoAccounts.value = [];
