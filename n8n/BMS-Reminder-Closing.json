@@ -1,0 +1,91 @@
+{
+  "name": "BMS Reminder Closing",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bms-notifications",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "a1b2c3d4-e5f6-7890-ab12-cd34ef56gh01",
+      "name": "Webhook BMS",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "bms-notifications"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Payload Laravel: { event, data: { recipients: [{ phone, message, status, ... }] } }\nconst root = $input.first().json || {};\nconst payload = root.body && typeof root.body === 'object' ? root.body : root;\n\nif (payload.event !== 'reminder_closing') {\n  return [];\n}\n\nconst recipients = Array.isArray(payload.data?.recipients) ? payload.data.recipients : [];\n\nreturn recipients\n  .map((r) => {\n    const status = String(r.status || 'active').toLowerCase();\n    if (status !== 'active') return null;\n    let phone = String(r.phone || '').replace(/\\D+/g, '');\n    if (phone.startsWith('0')) phone = '62' + phone.slice(1);\n    if (phone.startsWith('8') && !phone.startsWith('62')) phone = '62' + phone;\n    const message = String(r.message || '').trim();\n    if (!phone || phone.length < 11 || !message) return null;\n    return {\n      json: {\n        employee_id: r.employee_id ?? null,\n        name: r.name || '',\n        branch_name: r.branch_name || '',\n        status: 'active',\n        phone,\n        chatId: `${phone}@c.us`,\n        message,\n      },\n    };\n  })\n  .filter(Boolean);"
+      },
+      "id": "b2c3d4e5-f678-9012-ab34-cd56ef78gh02",
+      "name": "Pecah penerima",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [280, 0]
+    },
+    {
+      "parameters": {
+        "resource": "Chatting",
+        "operation": "SendText",
+        "session": "default",
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.message }}",
+        "requestOptions": {}
+      },
+      "id": "c3d4e5f6-7890-1234-ab56-cd78ef90gh03",
+      "name": "WAHA SendText",
+      "type": "@devlikeapro/n8n-nodes-waha.WAHA",
+      "typeVersion": 202502,
+      "position": [560, 0]
+    },
+    {
+      "parameters": {
+        "content": "## BMS Reminder Closing\n\n**Import → pilih credential WAHA → Active**\n\nWebhook:\n`https://n8n.adbr.my.id/webhook/bms-notifications`\n\nBMS `.env`:\n`N8N_WEBHOOK_URL=https://n8n.adbr.my.id/webhook/bms-notifications`\n\nTes:\n`php artisan closing:remind --dry-run`\n`php artisan closing:remind`\n\nJadwal & penerima: BMS Owner → Sistem → Pengingat\n(jam + pilih jabatan)\n\nSession WAHA default = `default` (ubah jika beda).",
+        "height": 460,
+        "width": 400,
+        "color": 5
+      },
+      "id": "a0b1c2d3-note-0001-sticky-bms-closing",
+      "name": "Petunjuk",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-460, -100]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook BMS": {
+      "main": [
+        [
+          {
+            "node": "Pecah penerima",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pecah penerima": {
+      "main": [
+        [
+          {
+            "node": "WAHA SendText",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Jayapura"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

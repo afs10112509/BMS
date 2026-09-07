@@ -30,6 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => \App\Http\Middleware\EnsureRole::class,
             'admin.branch' => \App\Http\Middleware\EnsureAdminHasBranch::class,
             'branch.type' => \App\Http\Middleware\CheckBranchType::class,
+            'block.employee' => \App\Http\Middleware\BlockEmployeeStaffApi::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

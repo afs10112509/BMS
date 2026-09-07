@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Employee;
 use App\Models\WorkshopJob;
+use App\Models\WorkshopJobType;
 use App\Models\WorkshopWageSetting;
 use App\Models\WorkshopWeek;
 use App\Services\BranchContext;
@@ -116,6 +117,84 @@ class WorkshopWageController extends Controller
         return $this->getSettings($request);
     }
 
+    public function copyPreviousSettings(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $this->authorize('viewAny', WorkshopJob::class);
+        $data = $request->validate([
+            'year' => ['required', 'integer', 'min:2020', 'max:2100'],
+            'month' => ['required', 'integer', 'min:1', 'max:12'],
+            'branch_id' => ['nullable', 'integer', 'exists:branches,id'],
+        ]);
+
+        $branchId = $this->resolveWorkshopBranchId($user, $data['branch_id'] ?? null, requireBranch: true);
+        if ($branchId instanceof JsonResponse) {
+            return $branchId;
+        }
+
+        $year = (int) $data['year'];
+        $month = (int) $data['month'];
+        $prev = Carbon::create($year, $month, 1)->subMonth();
+        $prevYear = (int) $prev->year;
+        $prevMonth = (int) $prev->month;
+
+        $prevMap = $this->payout->loadTechShareMap($branchId, $prevYear, $prevMonth);
+        if ($prevMap === []) {
+            return response()->json([
+                'message' => "Bulan {$prevMonth}/{$prevYear} belum punya pengaturan persen tersimpan.",
+            ], 422);
+        }
+
+        $allowedIds = $this->eligibleTechniciansQuery($branchId)->pluck('id')->all();
+        $copied = 0;
+
+        DB::transaction(function () use ($branchId, $year, $month, $user, $prevMap, $allowedIds, &$copied) {
+            foreach ($allowedIds as $employeeId) {
+                $employeeId = (int) $employeeId;
+                if (! array_key_exists($employeeId, $prevMap)) {
+                    continue;
+                }
+
+                WorkshopWageSetting::query()->updateOrCreate(
+                    [
+                        'branch_id' => $branchId,
+                        'employee_id' => $employeeId,
+                        'year' => $year,
+                        'month' => $month,
+                    ],
+                    [
+                        'tech_share_pct' => round((float) $prevMap[$employeeId], 2),
+                        'set_by' => $user->id,
+                    ]
+                );
+                $copied++;
+            }
+        });
+
+        if ($copied === 0) {
+            return response()->json([
+                'message' => "Tidak ada teknisi aktif yang punya persen di bulan {$prevMonth}/{$prevYear}.",
+            ], 422);
+        }
+
+        $request->merge([
+            'year' => $year,
+            'month' => $month,
+            'branch_id' => $branchId,
+        ]);
+
+        $response = $this->getSettings($request);
+        $payload = $response->getData(true);
+        $payload['message'] = "Berhasil menyalin {$copied} persen dari bulan {$prevMonth}/{$prevYear}.";
+        $payload['meta']['copied_from'] = [
+            'year' => $prevYear,
+            'month' => $prevMonth,
+            'copied_count' => $copied,
+        ];
+
+        return response()->json($payload);
+    }
+
     public function jobs(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -206,6 +285,72 @@ class WorkshopWageController extends Controller
         return response()->json([
             'message' => 'Kerja bengkel berhasil ditambah.',
             'data' => $this->payout->jobPayload($job),
+        ], 201);
+    }
+
+    public function storeJobsBatch(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $this->authorize('create', WorkshopJob::class);
+        $data = $request->validate([
+            'branch_id' => ['nullable', 'integer', 'exists:branches,id'],
+            'job_date' => ['required', 'date'],
+            'items' => ['required', 'array', 'min:1', 'max:100'],
+            'items.*.employee_id' => ['required', 'integer', 'exists:employees,id'],
+            'items.*.job_type' => ['required', 'string', 'max:100'],
+            'items.*.amount' => ['required', 'numeric', 'min:0.01'],
+            'items.*.note' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $branchId = $this->resolveWorkshopBranchId($user, $data['branch_id'] ?? null, requireBranch: true);
+        if ($branchId instanceof JsonResponse) {
+            return $branchId;
+        }
+
+        $jobDate = Carbon::parse($data['job_date'])->toDateString();
+        if ($deny = $this->payout->denyIfWeekPaid($branchId, $jobDate)) {
+            return $deny;
+        }
+
+        $allowed = $this->eligibleTechniciansQuery($branchId)->pluck('id')->all();
+        $allowedSet = array_fill_keys($allowed, true);
+
+        foreach ($data['items'] as $index => $item) {
+            if (! isset($allowedSet[(int) $item['employee_id']])) {
+                return response()->json([
+                    'message' => 'Teknisi tidak valid pada baris '.(intval($index) + 1).'.',
+                ], 422);
+            }
+        }
+
+        $created = DB::transaction(function () use ($data, $branchId, $jobDate, $user) {
+            $rows = [];
+            foreach ($data['items'] as $item) {
+                $job = WorkshopJob::query()->create([
+                    'branch_id' => $branchId,
+                    'employee_id' => (int) $item['employee_id'],
+                    'job_date' => $jobDate,
+                    'job_type' => trim($item['job_type']),
+                    'amount' => round((float) $item['amount'], 2),
+                    'note' => $item['note'] ?? null,
+                    'input_by' => $user->id,
+                ]);
+                $job->load(['employee:id,name,position', 'inputter:id,name']);
+                $rows[] = $this->payout->jobPayload($job);
+            }
+
+            return $rows;
+        });
+
+        return response()->json([
+            'message' => count($created).' kerja bengkel berhasil disimpan.',
+            'meta' => [
+                'branch_id' => $branchId,
+                'job_date' => $jobDate,
+                'created_count' => count($created),
+                'total_amount' => round(collect($created)->sum(fn ($r) => (float) $r['amount']), 2),
+            ],
+            'data' => $created,
         ], 201);
     }
 
@@ -535,8 +680,10 @@ class WorkshopWageController extends Controller
     public function jobTypes(Request $request): JsonResponse
     {
         $user = $request->user();
+        $this->authorize('viewAny', WorkshopJob::class);
         $data = $request->validate([
             'branch_id' => ['nullable', 'integer', 'exists:branches,id'],
+            'include_inactive' => ['nullable', 'boolean'],
         ]);
 
         $branchId = $this->resolveWorkshopBranchId($user, $data['branch_id'] ?? null, requireBranch: true);
@@ -544,25 +691,154 @@ class WorkshopWageController extends Controller
             return $branchId;
         }
 
-        $defaults = ['ONGKER', 'GANTI OLI', 'GANTI BAN DALAM', 'GANTI KAMPAS', 'GANTI LAHAR', 'TUBLES'];
-        $fromDb = WorkshopJob::query()
-            ->where('branch_id', $branchId)
-            ->select('job_type')
-            ->distinct()
-            ->orderBy('job_type')
-            ->pluck('job_type')
-            ->all();
+        $this->ensureDefaultJobTypes($branchId, $user->id);
 
-        $merged = collect(array_merge($defaults, $fromDb))
-            ->map(fn ($t) => trim((string) $t))
-            ->filter()
-            ->unique(fn ($t) => mb_strtoupper($t))
-            ->values()
-            ->all();
+        $includeInactive = (bool) ($data['include_inactive'] ?? false);
+        $query = WorkshopJobType::query()
+            ->where('branch_id', $branchId)
+            ->orderBy('sort_order')
+            ->orderBy('name');
+
+        if (! $includeInactive) {
+            $query->active();
+        }
+
+        $rows = $query->get()->map(fn (WorkshopJobType $t) => $t->toCatalogPayload())->values();
 
         return response()->json([
-            'message' => 'Jenis kerja berhasil diambil.',
-            'data' => $merged,
+            'message' => 'Daftar jenis kerja berhasil diambil.',
+            'meta' => [
+                'branch_id' => $branchId,
+            ],
+            'data' => $rows,
+        ]);
+    }
+
+    public function storeJobType(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $this->authorize('create', WorkshopJob::class);
+        $data = $request->validate([
+            'branch_id' => ['nullable', 'integer', 'exists:branches,id'],
+            'name' => ['required', 'string', 'max:100'],
+            'default_amount' => ['nullable', 'numeric', 'min:0'],
+            'sort_order' => ['nullable', 'integer', 'min:0', 'max:9999'],
+        ]);
+
+        $branchId = $this->resolveWorkshopBranchId($user, $data['branch_id'] ?? null, requireBranch: true);
+        if ($branchId instanceof JsonResponse) {
+            return $branchId;
+        }
+
+        $name = WorkshopJobType::normalizeName($data['name']);
+        if ($name === '') {
+            return response()->json(['message' => 'Nama jenis kerja wajib diisi.'], 422);
+        }
+
+        $dup = WorkshopJobType::query()
+            ->where('branch_id', $branchId)
+            ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
+            ->exists();
+        if ($dup) {
+            return response()->json(['message' => 'Jenis kerja sudah ada di cabang ini.'], 422);
+        }
+
+        $maxSort = (int) WorkshopJobType::query()->where('branch_id', $branchId)->max('sort_order');
+        $row = WorkshopJobType::query()->create([
+            'branch_id' => $branchId,
+            'name' => $name,
+            'default_amount' => isset($data['default_amount']) ? round((float) $data['default_amount'], 2) : null,
+            'status' => WorkshopJobType::STATUS_ACTIVE,
+            'sort_order' => (int) ($data['sort_order'] ?? ($maxSort + 1)),
+            'created_by' => $user->id,
+        ]);
+
+        return response()->json([
+            'message' => 'Jenis kerja berhasil ditambah.',
+            'data' => $row->toCatalogPayload(),
+        ], 201);
+    }
+
+    public function updateJobType(Request $request, WorkshopJobType $workshopJobType): JsonResponse
+    {
+        $user = $request->user();
+        $this->authorize('create', WorkshopJob::class);
+
+        $access = $this->authorizeJobTypeBranch($user, $workshopJobType);
+        if ($access instanceof JsonResponse) {
+            return $access;
+        }
+
+        $data = $request->validate([
+            'name' => ['sometimes', 'string', 'max:100'],
+            'default_amount' => ['nullable', 'numeric', 'min:0'],
+            'status' => ['sometimes', 'in:active,inactive'],
+            'sort_order' => ['sometimes', 'integer', 'min:0', 'max:9999'],
+        ]);
+
+        if (array_key_exists('name', $data)) {
+            $name = WorkshopJobType::normalizeName($data['name']);
+            if ($name === '') {
+                return response()->json(['message' => 'Nama jenis kerja wajib diisi.'], 422);
+            }
+            $dup = WorkshopJobType::query()
+                ->where('branch_id', $workshopJobType->branch_id)
+                ->where('id', '!=', $workshopJobType->id)
+                ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
+                ->exists();
+            if ($dup) {
+                return response()->json(['message' => 'Jenis kerja sudah ada di cabang ini.'], 422);
+            }
+            $workshopJobType->name = $name;
+        }
+
+        if (array_key_exists('default_amount', $data)) {
+            $workshopJobType->default_amount = $data['default_amount'] === null
+                ? null
+                : round((float) $data['default_amount'], 2);
+        }
+        if (isset($data['status'])) {
+            $workshopJobType->status = $data['status'];
+        }
+        if (isset($data['sort_order'])) {
+            $workshopJobType->sort_order = (int) $data['sort_order'];
+        }
+        $workshopJobType->save();
+
+        return response()->json([
+            'message' => 'Jenis kerja berhasil diperbarui.',
+            'data' => $workshopJobType->fresh()->toCatalogPayload(),
+        ]);
+    }
+
+    public function destroyJobType(Request $request, WorkshopJobType $workshopJobType): JsonResponse
+    {
+        $user = $request->user();
+        $this->authorize('create', WorkshopJob::class);
+
+        $access = $this->authorizeJobTypeBranch($user, $workshopJobType);
+        if ($access instanceof JsonResponse) {
+            return $access;
+        }
+
+        $used = WorkshopJob::query()
+            ->where('branch_id', $workshopJobType->branch_id)
+            ->whereRaw('LOWER(job_type) = ?', [mb_strtolower($workshopJobType->name)])
+            ->exists();
+
+        if ($used) {
+            $workshopJobType->update(['status' => WorkshopJobType::STATUS_INACTIVE]);
+
+            return response()->json([
+                'message' => 'Jenis kerja sudah dipakai di transaksi; status dinonaktifkan.',
+                'data' => $workshopJobType->fresh()->toCatalogPayload(),
+            ]);
+        }
+
+        $workshopJobType->delete();
+
+        return response()->json([
+            'message' => 'Jenis kerja berhasil dihapus.',
         ]);
     }
 
@@ -612,12 +888,77 @@ class WorkshopWageController extends Controller
         return null;
     }
 
+    private function authorizeJobTypeBranch($user, WorkshopJobType $type): ?JsonResponse
+    {
+        $branchId = $this->resolveWorkshopBranchId($user, $type->branch_id, requireBranch: true);
+        if ($branchId instanceof JsonResponse) {
+            return $branchId;
+        }
+        if ((int) $type->branch_id !== (int) $branchId) {
+            return response()->json(['message' => 'Akses ditolak untuk cabang ini.'], 403);
+        }
+
+        return null;
+    }
+
+    private function ensureDefaultJobTypes(int $branchId, ?int $userId): void
+    {
+        $count = WorkshopJobType::query()->where('branch_id', $branchId)->count();
+        if ($count > 0) {
+            return;
+        }
+
+        foreach (WorkshopJobType::DEFAULT_NAMES as $i => $name) {
+            WorkshopJobType::query()->create([
+                'branch_id' => $branchId,
+                'name' => $name,
+                'default_amount' => null,
+                'status' => WorkshopJobType::STATUS_ACTIVE,
+                'sort_order' => $i + 1,
+                'created_by' => $userId,
+            ]);
+        }
+
+        // Tarik jenis historis dari job lama (jika ada).
+        $historic = WorkshopJob::query()
+            ->where('branch_id', $branchId)
+            ->select('job_type')
+            ->distinct()
+            ->pluck('job_type')
+            ->all();
+
+        $sort = count(WorkshopJobType::DEFAULT_NAMES);
+        foreach ($historic as $raw) {
+            $name = WorkshopJobType::normalizeName((string) $raw);
+            if ($name === '') {
+                continue;
+            }
+            $exists = WorkshopJobType::query()
+                ->where('branch_id', $branchId)
+                ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
+                ->exists();
+            if ($exists) {
+                continue;
+            }
+            $sort++;
+            WorkshopJobType::query()->create([
+                'branch_id' => $branchId,
+                'name' => $name,
+                'default_amount' => null,
+                'status' => WorkshopJobType::STATUS_ACTIVE,
+                'sort_order' => $sort,
+                'created_by' => $userId,
+            ]);
+        }
+    }
+
     private function eligibleTechniciansQuery(int $branchId)
     {
+        // PIC + teknisi boleh ikut upah bengkel; hanya Owner yang disembunyikan.
         return Employee::query()
             ->where('branch_id', $branchId)
             ->where('status', 'active')
-            ->withoutManagement()
+            ->withoutOwner()
             ->orderBy('name');
     }
 }

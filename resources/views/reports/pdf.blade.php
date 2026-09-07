@@ -64,13 +64,30 @@
     .summary .value { font-size: 13px; font-weight: bold; margin-top: 2px; }
     .footer { margin-top: 16px; color: #64748B; font-size: 9px; border-top: 1px solid #E2E8F0; padding-top: 8px; }
     .empty { padding: 12px; border: 1px dashed #CBD5E1; color: #64748B; }
+    .meta-note { font-size: 9px; color: #64748B; margin: 0 0 6px; }
+    .status-pill {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: 9px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: .02em;
+    }
+    .status-pill.ok { background: #D1FAE5; color: #047857; }
+    .status-pill.bad { background: #FEE2E2; color: #B91C1C; }
   </style>
 </head>
 <body>
   <div class="header">
     <div class="brand">BMS — Belawa Management System</div>
     <h1>{{ $meta['judul'] ?? 'Laporan' }}</h1>
-    <p class="header-sub">Periode: {{ $meta['periode'] ?? '-' }} | Cabang: {{ $meta['cabang'] ?? '-' }}</p>
+    <p class="header-sub">
+      Periode: {{ $meta['periode'] ?? '-' }} | Cabang: {{ $meta['cabang'] ?? '-' }}
+      @if (($type ?? '') === 'upah')
+        | Teknisi: {{ $meta['teknisi'] ?? 'Semua teknisi' }}
+      @endif
+    </p>
   </div>
 
   <table class="meta-box">
@@ -83,8 +100,8 @@
     <tr>
       <td class="lbl">Periode</td>
       <td>{{ $meta['periode'] ?? '-' }}</td>
-      <td class="lbl">Tipe</td>
-      <td>{{ $meta['tipe'] ?? '-' }}</td>
+      <td class="lbl">{{ ($type ?? '') === 'upah' ? 'Teknisi' : 'Tipe' }}</td>
+      <td>{{ ($type ?? '') === 'upah' ? ($meta['teknisi'] ?? 'Semua teknisi') : ($meta['tipe'] ?? '-') }}</td>
     </tr>
     <tr>
       <td class="lbl">Kategori</td>
@@ -152,27 +169,126 @@
     </table>
 
   @elseif ($type === 'kategori')
+    @php
+      $kategoriMode = $data['mode'] ?? 'summary';
+      $kategoriSummary = $data['rows'] ?? [];
+    @endphp
+    <p>{{ $data['jumlah'] ?? 0 }} transaksi
+      | Pemasukan <strong class="income">Rp {{ number_format($data['total_pemasukan'] ?? 0, 0, ',', '.') }}</strong>
+      | Pengeluaran <strong class="expense">Rp {{ number_format($data['total_pengeluaran'] ?? 0, 0, ',', '.') }}</strong></p>
+    @if ($kategoriMode !== 'detail')
+      <table class="data">
+        <thead>
+          <tr>
+            <th>Kategori</th>
+            <th>Tipe</th>
+            <th class="right">Jumlah</th>
+            <th class="right">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          @forelse ($kategoriSummary as $row)
+            <tr>
+              <td>{{ $row['nama'] }}</td>
+              <td>{{ ($row['tipe'] ?? '') === 'income' ? 'Pemasukan' : 'Pengeluaran' }}</td>
+              <td class="right">{{ $row['jumlah'] ?? 0 }}</td>
+              <td class="right {{ ($row['tipe'] ?? '') === 'income' ? 'income' : 'expense' }}">
+                {{ number_format($row['total'] ?? 0, 0, ',', '.') }}
+              </td>
+            </tr>
+          @empty
+            <tr><td colspan="4">Tidak ada data pada periode ini.</td></tr>
+          @endforelse
+        </tbody>
+      </table>
+    @else
+      @forelse (($data['groups'] ?? []) as $group)
+        <h3 style="margin:14px 0 6px">
+          {{ $group['nama'] }}
+          ({{ ($group['tipe'] ?? '') === 'income' ? 'Pemasukan' : 'Pengeluaran' }})
+          — {{ $group['jumlah'] ?? 0 }} trx
+        </h3>
+        <table class="data">
+          <thead>
+            <tr>
+              <th>Tanggal</th><th>Cabang</th><th>Akun</th>
+              <th class="right">Nominal</th><th>Keterangan</th>
+            </tr>
+          </thead>
+          <tbody>
+            @foreach (($group['rows'] ?? []) as $row)
+              <tr>
+                <td>{{ $row['tanggal'] }}</td>
+                <td>{{ $row['cabang'] }}</td>
+                <td>{{ $row['akun'] ?: '-' }}</td>
+                <td class="right {{ ($group['tipe'] ?? '') === 'income' ? 'income' : 'expense' }}">
+                  {{ number_format($row['nominal'], 0, ',', '.') }}
+                </td>
+                <td>{{ $row['keterangan'] ?: '-' }}</td>
+              </tr>
+            @endforeach
+            <tr>
+              <td colspan="3"><strong>Total {{ $group['nama'] }}</strong></td>
+              <td class="right {{ ($group['tipe'] ?? '') === 'income' ? 'income' : 'expense' }}">
+                <strong>{{ number_format($group['total'] ?? 0, 0, ',', '.') }}</strong>
+              </td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+      @empty
+        <div class="empty">Tidak ada data pada periode ini.</div>
+      @endforelse
+    @endif
+    <p style="margin-top:12px">
+      Total pemasukan: <strong class="income">Rp {{ number_format($data['total_pemasukan'] ?? 0, 0, ',', '.') }}</strong>
+      | Total pengeluaran: <strong class="expense">Rp {{ number_format($data['total_pengeluaran'] ?? 0, 0, ',', '.') }}</strong>
+    </p>
+
+  @elseif ($type === 'alur-kas')
+    <p>
+      Transaksi: {{ $data['tx_count'] ?? 0 }}
+      | Pemasukan <strong class="income">Rp {{ number_format($data['total_pemasukan'] ?? 0, 0, ',', '.') }}</strong>
+      | Pengeluaran <strong class="expense">Rp {{ number_format($data['total_pengeluaran'] ?? 0, 0, ',', '.') }}</strong>
+      | Laba/Rugi
+      <strong class="{{ ($data['selisih'] ?? 0) >= 0 ? 'income' : 'expense' }}">
+        Rp {{ number_format($data['selisih'] ?? 0, 0, ',', '.') }}
+      </strong>
+    </p>
+    <h3 style="margin:12px 0 6px">Pemasukan</h3>
     <table class="data">
       <thead>
-        <tr><th>Kategori</th><th>Tipe</th><th class="right">Jumlah</th><th class="right">Total</th></tr>
+        <tr><th>Pos</th><th class="right">Qty</th><th class="right">Total</th></tr>
       </thead>
       <tbody>
-        @forelse (($data['rows'] ?? []) as $row)
+        @forelse (($data['pemasukan'] ?? []) as $row)
           <tr>
             <td>{{ $row['nama'] }}</td>
-            <td>{{ $row['tipe'] === 'income' ? 'Pemasukan' : 'Pengeluaran' }}</td>
             <td class="right">{{ $row['jumlah'] }}</td>
-            <td class="right {{ $row['tipe'] === 'income' ? 'income' : 'expense' }}">
-              {{ number_format($row['total'], 0, ',', '.') }}
-            </td>
+            <td class="right income">{{ number_format($row['total'], 0, ',', '.') }}</td>
           </tr>
         @empty
-          <tr><td colspan="4">Tidak ada data pada periode ini.</td></tr>
+          <tr><td colspan="3">Tidak ada pemasukan pada periode ini.</td></tr>
         @endforelse
       </tbody>
     </table>
-    <p>Total pemasukan: <strong class="income">Rp {{ number_format($data['total_pemasukan'] ?? 0, 0, ',', '.') }}</strong>
-      | Total pengeluaran: <strong class="expense">Rp {{ number_format($data['total_pengeluaran'] ?? 0, 0, ',', '.') }}</strong></p>
+    <h3 style="margin:12px 0 6px">Pengeluaran</h3>
+    <table class="data">
+      <thead>
+        <tr><th>Pos</th><th class="right">Qty</th><th class="right">Total</th></tr>
+      </thead>
+      <tbody>
+        @forelse (($data['pengeluaran'] ?? []) as $row)
+          <tr>
+            <td>{{ $row['nama'] }}</td>
+            <td class="right">{{ $row['jumlah'] }}</td>
+            <td class="right expense">{{ number_format($row['total'], 0, ',', '.') }}</td>
+          </tr>
+        @empty
+          <tr><td colspan="3">Tidak ada pengeluaran pada periode ini.</td></tr>
+        @endforelse
+      </tbody>
+    </table>
 
   @elseif ($type === 'akun')
     @if (($data['mode'] ?? '') === 'branch')
@@ -294,6 +410,16 @@
           <tr><td colspan="9">Tidak ada data pada periode ini.</td></tr>
         @endforelse
       </tbody>
+      @if (!empty($data['rows']))
+        <tfoot>
+          <tr>
+            <td colspan="6"><strong>Total</strong></td>
+            <td class="right"><strong>{{ number_format($data['total_modal'] ?? 0, 0, ',', '.') }}</strong></td>
+            <td class="right income"><strong>{{ number_format($data['total_harga'] ?? 0, 0, ',', '.') }}</strong></td>
+            <td class="right"><strong>{{ number_format($data['total_profit'] ?? 0, 0, ',', '.') }}</strong></td>
+          </tr>
+        </tfoot>
+      @endif
     </table>
 
   @elseif ($type === 'absensi')
@@ -324,12 +450,14 @@
     <p>{{ $data['periode_label'] ?? '' }} · {{ $data['jumlah'] ?? 0 }} karyawan
       · Total Rp {{ number_format($data['total_gaji'] ?? 0, 0, ',', '.') }}
       · Draft {{ $data['draft'] ?? 0 }} · Locked {{ $data['locked'] ?? 0 }}</p>
+      <p class="meta-note">Total = Gapok + PIC + HP + Service + ACC + Bonus − Hutang − Kasbon (PIC hanya jabatan PIC)</p>
     <table class="data">
       <thead>
         <tr>
           <th>Cabang</th><th>Karyawan</th><th>Status</th><th class="right">Hadir</th>
-          <th class="right">Gapok</th><th class="right">HP</th><th class="right">Service</th>
-          <th class="right">Acc</th><th class="right">Bonus</th><th class="right">Hutang</th><th class="right">Total</th>
+          <th class="right">Gapok</th><th class="right">PIC</th><th class="right">HP</th><th class="right">Service</th>
+          <th class="right">ACC</th><th class="right">Bonus</th>
+          <th class="right">Hutang</th><th class="right">Kasbon</th><th class="right">Total</th>
         </tr>
       </thead>
       <tbody>
@@ -340,23 +468,97 @@
             <td>{{ strtoupper($row['status']) }}</td>
             <td class="right">{{ $row['hadir'] }}</td>
             <td class="right">{{ number_format($row['gapok'], 0, ',', '.') }}</td>
+            <td class="right">{{ number_format($row['insentif_pic'] ?? 0, 0, ',', '.') }}</td>
             <td class="right">{{ number_format($row['insentif_hp'], 0, ',', '.') }}</td>
             <td class="right">{{ number_format($row['insentif_service'], 0, ',', '.') }}</td>
             <td class="right">{{ number_format($row['acc'], 0, ',', '.') }}</td>
             <td class="right">{{ number_format($row['bonus'], 0, ',', '.') }}</td>
             <td class="right expense">{{ number_format($row['hutang'], 0, ',', '.') }}</td>
-            <td class="right"><strong>{{ number_format($row['total'], 0, ',', '.') }}</strong></td>
+            <td class="right expense">{{ number_format($row['pengeluaran'] ?? 0, 0, ',', '.') }}</td>
+            <td class="right {{ (($row['total'] ?? 0) < 0) ? 'expense' : '' }}"><strong>{{ number_format($row['total'], 0, ',', '.') }}</strong></td>
           </tr>
         @empty
-          <tr><td colspan="11">Tidak ada data gaji untuk bulan ini.</td></tr>
+          <tr><td colspan="13">Tidak ada data gaji untuk bulan ini.</td></tr>
         @endforelse
+        @if (!empty($data['rows']))
+          <tr>
+            <td colspan="3"><strong>Subtotal</strong></td>
+            <td class="right"><strong>{{ (int) ($data['total_hadir'] ?? 0) }}</strong></td>
+            <td class="right"><strong>{{ number_format($data['total_gapok'] ?? 0, 0, ',', '.') }}</strong></td>
+            <td class="right"><strong>{{ number_format($data['total_insentif_pic'] ?? 0, 0, ',', '.') }}</strong></td>
+            <td class="right"><strong>{{ number_format($data['total_insentif_hp'] ?? 0, 0, ',', '.') }}</strong></td>
+            <td class="right"><strong>{{ number_format($data['total_insentif_service'] ?? 0, 0, ',', '.') }}</strong></td>
+            <td class="right"><strong>{{ number_format($data['total_acc'] ?? 0, 0, ',', '.') }}</strong></td>
+            <td class="right"><strong>{{ number_format($data['total_bonus'] ?? 0, 0, ',', '.') }}</strong></td>
+            <td class="right expense"><strong>{{ number_format($data['total_hutang'] ?? 0, 0, ',', '.') }}</strong></td>
+            <td class="right expense"><strong>{{ number_format($data['total_pengeluaran'] ?? 0, 0, ',', '.') }}</strong></td>
+            <td class="right {{ (($data['total_gaji'] ?? 0) < 0) ? 'expense' : '' }}"><strong>{{ number_format($data['total_gaji'] ?? 0, 0, ',', '.') }}</strong></td>
+          </tr>
+        @endif
       </tbody>
     </table>
 
   @elseif ($type === 'upah')
-    <p>{{ $data['jumlah'] ?? 0 }} job · Gross Rp {{ number_format($data['total_gross'] ?? 0, 0, ',', '.') }}
+    <p>
+      Teknisi: {{ $meta['teknisi'] ?? 'Semua teknisi' }} ·
+      {{ $data['jumlah'] ?? 0 }} job · {{ $data['jumlah_teknisi'] ?? 0 }} teknisi ·
+      Gross Rp {{ number_format($data['total_gross'] ?? 0, 0, ',', '.') }}
       · Upah teknisi Rp {{ number_format($data['total_net'] ?? 0, 0, ',', '.') }}
-      · Bagian toko Rp {{ number_format($data['total_shop'] ?? 0, 0, ',', '.') }}</p>
+      · Bagian toko Rp {{ number_format($data['total_shop'] ?? 0, 0, ',', '.') }}
+    </p>
+
+    <h3 style="margin:14px 0 6px;font-size:12px;">Ringkasan per Teknisi</h3>
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Teknisi</th><th>Cabang</th>
+          <th class="right">Job</th>
+          <th class="right">Gross</th>
+          <th class="right">% Upah</th>
+          <th class="right">Upah</th>
+          <th class="right">% Toko</th>
+          <th class="right">Toko</th>
+        </tr>
+      </thead>
+      <tbody>
+        @forelse (($data['by_teknisi'] ?? []) as $sum)
+          @php
+            $techPct = $sum['tech_share_pct'] ?? null;
+            $shopPct = $sum['shop_share_pct'] ?? null;
+            $pctMixed = !empty($sum['pct_mixed']);
+            $pctSuffix = $pctMixed ? '*' : '';
+          @endphp
+          <tr>
+            <td>{{ $sum['teknisi'] }}</td>
+            <td>{{ $sum['cabang'] }}</td>
+            <td class="right">{{ $sum['jumlah_job'] }}</td>
+            <td class="right">{{ number_format($sum['total_gross'], 0, ',', '.') }}</td>
+            <td class="right">{{ $techPct === null ? '-' : number_format((float) $techPct, fmod((float) $techPct, 1.0) == 0.0 ? 0 : 2, ',', '.').$pctSuffix }}%</td>
+            <td class="right">{{ number_format($sum['total_net'], 0, ',', '.') }}</td>
+            <td class="right">{{ $shopPct === null ? '-' : number_format((float) $shopPct, fmod((float) $shopPct, 1.0) == 0.0 ? 0 : 2, ',', '.').$pctSuffix }}%</td>
+            <td class="right">{{ number_format($sum['total_shop'], 0, ',', '.') }}</td>
+          </tr>
+        @empty
+          <tr><td colspan="8">Tidak ada ringkasan teknisi.</td></tr>
+        @endforelse
+        @if (!empty($data['by_teknisi']))
+          <tr>
+            <td colspan="2"><strong>Total</strong></td>
+            <td class="right"><strong>{{ $data['jumlah'] ?? 0 }}</strong></td>
+            <td class="right"><strong>{{ number_format($data['total_gross'] ?? 0, 0, ',', '.') }}</strong></td>
+            <td></td>
+            <td class="right"><strong>{{ number_format($data['total_net'] ?? 0, 0, ',', '.') }}</strong></td>
+            <td></td>
+            <td class="right"><strong>{{ number_format($data['total_shop'] ?? 0, 0, ',', '.') }}</strong></td>
+          </tr>
+        @endif
+      </tbody>
+    </table>
+    @if (collect($data['by_teknisi'] ?? [])->contains(fn ($r) => !empty($r['pct_mixed'])))
+      <p style="font-size:10px;color:#64748b;margin:4px 0 0;">* Persentase efektif (ada lebih dari satu % bagi di periode laporan).</p>
+    @endif
+
+    <h3 style="margin:16px 0 6px;font-size:12px;">Detail Pekerjaan</h3>
     <table class="data">
       <thead>
         <tr>
@@ -379,31 +581,293 @@
         @empty
           <tr><td colspan="8">Tidak ada data pada periode ini.</td></tr>
         @endforelse
+        @if (!empty($data['rows']))
+          <tr>
+            <td colspan="4"><strong>Total</strong></td>
+            <td class="right"><strong>{{ number_format($data['total_gross'] ?? 0, 0, ',', '.') }}</strong></td>
+            <td></td>
+            <td class="right"><strong>{{ number_format($data['total_net'] ?? 0, 0, ',', '.') }}</strong></td>
+            <td></td>
+          </tr>
+        @endif
       </tbody>
     </table>
 
-  @elseif ($type === 'closing')
-    <p>{{ $data['periode_label'] ?? '' }} · Closing {{ $data['total_qty'] ?? 0 }} / Target {{ $data['total_target'] ?? 0 }}
-      @if(($data['pct'] ?? null) !== null) ({{ $data['pct'] }}%) @endif</p>
+  @elseif ($type === 'bagi-hasil')
+    <p>
+      {{ $data['periode_label'] ?? '' }} ·
+      {{ $data['jumlah'] ?? 0 }} cabang ·
+      Pemasukan Rp {{ number_format($data['total_income'] ?? 0, 0, ',', '.') }} ·
+      Pengeluaran Rp {{ number_format($data['total_expense'] ?? 0, 0, ',', '.') }} ·
+      Laba bersih Rp {{ number_format($data['total_net_profit'] ?? 0, 0, ',', '.') }} ·
+      Bagian PIC Rp {{ number_format($data['total_pic_amount'] ?? 0, 0, ',', '.') }} ·
+      Draft {{ $data['draft'] ?? 0 }} · Terkunci {{ $data['locked'] ?? 0 }}
+    </p>
+    <p class="meta-note">Laba bersih = total pemasukan − total pengeluaran. Bagian PIC = laba bersih × % PIC (boleh negatif).</p>
+
+    <h3 style="margin:14px 0 6px;font-size:12px;">Ringkasan per Cabang</h3>
     <table class="data">
       <thead>
-        <tr><th>Karyawan</th><th>Cabang</th><th class="right">Closing</th><th class="right">Target</th><th class="right">%</th><th class="right">Selisih</th></tr>
+        <tr>
+          <th>Periode</th>
+          <th>Cabang</th>
+          <th>PIC</th>
+          <th class="right">%</th>
+          <th class="right">Pemasukan</th>
+          <th class="right">Pengeluaran</th>
+          <th class="right">Laba Bersih</th>
+          <th class="right">Bagian PIC</th>
+          <th>Status</th>
+        </tr>
       </thead>
       <tbody>
         @forelse (($data['rows'] ?? []) as $row)
+          <tr>
+            <td>{{ $row['periode_label'] }}</td>
+            <td>{{ $row['cabang'] }}</td>
+            <td>{{ $row['pic_name'] ?: '-' }}</td>
+            <td class="right">{{ number_format((float) ($row['pic_share_pct'] ?? 0), fmod((float) ($row['pic_share_pct'] ?? 0), 1.0) == 0.0 ? 0 : 2, ',', '.') }}%</td>
+            <td class="right income">{{ number_format($row['total_income'], 0, ',', '.') }}</td>
+            <td class="right expense">{{ number_format($row['total_expense'], 0, ',', '.') }}</td>
+            <td class="right {{ (($row['net_profit'] ?? 0) < 0) ? 'expense' : '' }}">{{ number_format($row['net_profit'], 0, ',', '.') }}</td>
+            <td class="right"><strong>{{ number_format($row['pic_amount'], 0, ',', '.') }}</strong></td>
+            <td>{{ ($row['status'] ?? '') === 'locked' ? 'Terkunci' : 'Draft' }}</td>
+          </tr>
+        @empty
+          <tr><td colspan="9">Tidak ada data bagi hasil pada periode ini.</td></tr>
+        @endforelse
+        @if (!empty($data['rows']))
+          <tr>
+            <td colspan="4"><strong>Total</strong></td>
+            <td class="right income"><strong>{{ number_format($data['total_income'] ?? 0, 0, ',', '.') }}</strong></td>
+            <td class="right expense"><strong>{{ number_format($data['total_expense'] ?? 0, 0, ',', '.') }}</strong></td>
+            <td class="right {{ (($data['total_net_profit'] ?? 0) < 0) ? 'expense' : '' }}"><strong>{{ number_format($data['total_net_profit'] ?? 0, 0, ',', '.') }}</strong></td>
+            <td class="right"><strong>{{ number_format($data['total_pic_amount'] ?? 0, 0, ',', '.') }}</strong></td>
+            <td></td>
+          </tr>
+        @endif
+      </tbody>
+    </table>
+
+    @foreach (($data['rows'] ?? []) as $row)
+      <h3 style="margin:16px 0 6px;font-size:12px;">
+        Rincian Pos — {{ $row['cabang'] }} ({{ $row['periode_label'] }})
+      </h3>
+      @if (!empty($row['note']))
+        <p class="meta-note">Catatan: {{ $row['note'] }}</p>
+      @endif
+      <table class="data">
+        <thead>
+          <tr>
+            <th>Jenis</th>
+            <th>Pos</th>
+            <th class="right">Nominal</th>
+          </tr>
+        </thead>
+        <tbody>
+          @forelse (($row['income_lines'] ?? []) as $line)
+            <tr>
+              <td>Pemasukan</td>
+              <td>{{ $line['name'] }}</td>
+              <td class="right income">{{ number_format($line['amount'], 0, ',', '.') }}</td>
+            </tr>
+          @empty
+          @endforelse
+          @forelse (($row['expense_lines'] ?? []) as $line)
+            <tr>
+              <td>Pengeluaran</td>
+              <td>{{ $line['name'] }}</td>
+              <td class="right expense">{{ number_format($line['amount'], 0, ',', '.') }}</td>
+            </tr>
+          @empty
+          @endforelse
+          @if (empty($row['income_lines']) && empty($row['expense_lines']))
+            <tr><td colspan="3">Tidak ada rincian pos.</td></tr>
+          @endif
+          <tr>
+            <td colspan="2"><strong>Bagian PIC ({{ number_format((float) ($row['pic_share_pct'] ?? 0), 0, ',', '.') }}%)</strong></td>
+            <td class="right"><strong>{{ number_format($row['pic_amount'], 0, ',', '.') }}</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    @endforeach
+
+  @elseif ($type === 'closing')
+    <p>{{ $data['periode_label'] ?? '' }} · Closing {{ $data['total_qty'] ?? 0 }} / Target {{ $data['total_target'] ?? 0 }}
+      @if(($data['pct'] ?? null) !== null) ({{ $data['pct'] }}%) @endif
+      · Tercapai {{ $data['jumlah_tercapai'] ?? 0 }} · Belum {{ $data['jumlah_belum'] ?? 0 }}
+    </p>
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Karyawan</th><th>Cabang</th>
+          <th class="right">Closing</th><th class="right">Target</th>
+          <th class="right">%</th><th>Status</th><th class="right">Selisih</th>
+        </tr>
+      </thead>
+      <tbody>
+        @forelse (($data['rows'] ?? []) as $row)
+          @php
+            $ok = (bool) ($row['tercapai'] ?? (($row['selisih'] ?? 0) >= 0));
+            $selisih = (int) ($row['selisih'] ?? 0);
+          @endphp
           <tr>
             <td>{{ $row['nama'] }}</td>
             <td>{{ $row['cabang'] }}</td>
             <td class="right">{{ $row['qty'] }}</td>
             <td class="right">{{ $row['target'] }}</td>
-            <td class="right">{{ $row['pct'] !== null ? $row['pct'].'%' : '-' }}</td>
-            <td class="right">{{ $row['selisih'] }}</td>
+            <td class="right {{ $ok ? 'income' : 'expense' }}">{{ $row['pct'] !== null ? $row['pct'].'%' : '-' }}</td>
+            <td>
+              <span class="status-pill {{ $ok ? 'ok' : 'bad' }}">{{ $row['status_label'] ?? ($ok ? 'Tercapai' : 'Belum tercapai') }}</span>
+            </td>
+            <td class="right {{ $ok ? 'income' : 'expense' }}">{{ $selisih > 0 ? '+' : '' }}{{ $selisih }}</td>
           </tr>
         @empty
-          <tr><td colspan="6">Tidak ada data.</td></tr>
+          <tr><td colspan="7">Tidak ada data.</td></tr>
         @endforelse
       </tbody>
     </table>
+
+  @elseif ($type === 'brilink')
+    <p>{{ $data['jumlah'] ?? 0 }} hari · Total Rp {{ number_format($data['total_hari_ini'] ?? 0, 0, ',', '.') }}
+      · Keuntungan Rp {{ number_format($data['total_keuntungan'] ?? 0, 0, ',', '.') }}</p>
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Tanggal</th><th>Cabang</th>
+          <th class="right">Saldo Kemarin</th>
+          <th class="right">Total Hari Ini</th>
+          <th class="right">Keuntungan</th>
+          <th>Oleh</th>
+        </tr>
+      </thead>
+      <tbody>
+        @forelse (($data['rows'] ?? []) as $row)
+          <tr>
+            <td>{{ $row['tanggal'] }}</td>
+            <td>{{ $row['cabang'] }}</td>
+            <td class="right">{{ number_format($row['saldo_kemarin'], 0, ',', '.') }}</td>
+            <td class="right income">{{ number_format($row['total'], 0, ',', '.') }}</td>
+            <td class="right"><strong>{{ number_format($row['keuntungan'], 0, ',', '.') }}</strong></td>
+            <td>{{ $row['oleh'] ?? '—' }}</td>
+          </tr>
+        @empty
+          <tr><td colspan="6">Tidak ada data pada periode ini.</td></tr>
+        @endforelse
+      </tbody>
+      @if (!empty($data['rows']))
+        <tfoot>
+          <tr>
+            <td colspan="2"><strong>Total</strong></td>
+            <td class="right"><strong>{{ number_format($data['total_saldo_kemarin'] ?? 0, 0, ',', '.') }}</strong></td>
+            <td class="right income"><strong>{{ number_format($data['total_hari_ini'] ?? 0, 0, ',', '.') }}</strong></td>
+            <td class="right"><strong>{{ number_format($data['total_keuntungan'] ?? 0, 0, ',', '.') }}</strong></td>
+            <td></td>
+          </tr>
+        </tfoot>
+      @endif
+    </table>
+    @foreach (($data['rows'] ?? []) as $row)
+      @if (!empty($row['lines']))
+        <p style="margin-top:14px;margin-bottom:4px"><strong>{{ $row['tanggal'] }} — Rincian ({{ $row['cabang'] }})</strong></p>
+        <table class="data">
+          <thead><tr><th>Item</th><th class="right">Nominal</th></tr></thead>
+          <tbody>
+            @foreach ($row['lines'] as $l)
+              <tr>
+                <td>{{ $l['nama'] }}</td>
+                <td class="right">{{ number_format($l['nominal'], 0, ',', '.') }}</td>
+              </tr>
+            @endforeach
+          </tbody>
+        </table>
+      @endif
+    @endforeach
+
+  @elseif ($type === 'keuntungan-pulsa')
+    <p>{{ $data['jumlah'] ?? 0 }} hari · Saldo terpotong Rp {{ number_format($data['total_saldo_terpotong'] ?? 0, 0, ',', '.') }}
+      · Total uang Rp {{ number_format($data['total_uang'] ?? 0, 0, ',', '.') }}
+      · Keuntungan Rp {{ number_format($data['total_keuntungan'] ?? 0, 0, ',', '.') }}</p>
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Tanggal</th><th>Cabang</th>
+          <th class="right">Uang Pulsa</th><th class="right">Pengeluaran</th>
+          <th class="right">Total Uang</th><th class="right">Saldo Terpotong</th>
+          <th class="right">Keuntungan</th><th>Oleh</th>
+        </tr>
+      </thead>
+      <tbody>
+        @forelse (($data['rows'] ?? []) as $row)
+          <tr>
+            <td>{{ $row['tanggal'] }}</td>
+            <td>{{ $row['cabang'] }}</td>
+            <td class="right">{{ number_format($row['uang_pulsa'], 0, ',', '.') }}</td>
+            <td class="right">{{ number_format($row['pengeluaran'], 0, ',', '.') }}</td>
+            <td class="right income">{{ number_format($row['total_uang'], 0, ',', '.') }}</td>
+            <td class="right expense">{{ number_format($row['saldo_terpotong'], 0, ',', '.') }}</td>
+            <td class="right"><strong>{{ number_format($row['keuntungan'], 0, ',', '.') }}</strong></td>
+            <td>{{ $row['oleh'] ?? '—' }}</td>
+          </tr>
+        @empty
+          <tr><td colspan="8">Tidak ada data pada periode ini.</td></tr>
+        @endforelse
+      </tbody>
+      @if (!empty($data['rows']))
+        <tfoot>
+          <tr>
+            <td colspan="2"><strong>Total</strong></td>
+            <td class="right"><strong>{{ number_format($data['total_uang_pulsa'] ?? 0, 0, ',', '.') }}</strong></td>
+            <td class="right"><strong>{{ number_format($data['total_pengeluaran'] ?? 0, 0, ',', '.') }}</strong></td>
+            <td class="right income"><strong>{{ number_format($data['total_uang'] ?? 0, 0, ',', '.') }}</strong></td>
+            <td class="right expense"><strong>{{ number_format($data['total_saldo_terpotong'] ?? 0, 0, ',', '.') }}</strong></td>
+            <td class="right"><strong>{{ number_format($data['total_keuntungan'] ?? 0, 0, ',', '.') }}</strong></td>
+            <td></td>
+          </tr>
+        </tfoot>
+      @endif
+    </table>
+    @foreach (($data['rows'] ?? []) as $row)
+      @if (!empty($row['balances']))
+        <p style="margin-top:14px;margin-bottom:4px"><strong>{{ $row['tanggal'] }} — Rincian Provider ({{ $row['cabang'] }})</strong></p>
+        <table class="data">
+          <thead>
+            <tr>
+              <th>Provider</th>
+              <th class="right">Kemarin</th>
+              <th class="right">Tambah</th>
+              <th class="right">Sekarang</th>
+              <th class="right">Terpakai</th>
+            </tr>
+          </thead>
+          <tbody>
+            @foreach ($row['balances'] as $b)
+              <tr>
+                <td>{{ $b['provider'] }}</td>
+                <td class="right">{{ number_format($b['kemarin'], 0, ',', '.') }}</td>
+                <td class="right">{{ number_format($b['tambah'], 0, ',', '.') }}</td>
+                <td class="right">{{ number_format($b['sekarang'], 0, ',', '.') }}</td>
+                <td class="right">{{ number_format($b['terpakai'], 0, ',', '.') }}</td>
+              </tr>
+            @endforeach
+          </tbody>
+        </table>
+      @endif
+      @if (!empty($row['expenses']))
+        <p style="margin-top:8px;margin-bottom:4px"><strong>{{ $row['tanggal'] }} — Pengeluaran</strong></p>
+        <table class="data">
+          <thead><tr><th>Keterangan</th><th class="right">Nominal</th></tr></thead>
+          <tbody>
+            @foreach ($row['expenses'] as $e)
+              <tr>
+                <td>{{ $e['nama'] }}</td>
+                <td class="right">{{ number_format($e['nominal'], 0, ',', '.') }}</td>
+              </tr>
+            @endforeach
+          </tbody>
+        </table>
+      @endif
+    @endforeach
 
   @elseif ($type === 'rekonsiliasi')
     <p>{{ $data['jumlah'] ?? 0 }} cek · Ada selisih {{ $data['ada_selisih'] ?? 0 }}

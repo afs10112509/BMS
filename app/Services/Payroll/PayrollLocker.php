@@ -38,15 +38,20 @@ class PayrollLocker
                 }
 
                 $auto = $autoByEmployee[$employee->id] ?? $this->calculator->emptyAuto($employee);
+                $isPic = (bool) ($auto['is_pic'] ?? $employee->hasPosition(Employee::POS_PIC));
                 $gapok = $existing !== null
                     ? (float) $existing->gapok
                     : (float) $auto['gapok'];
+                $insentifPic = $isPic ? (float) ($existing?->insentif_pic ?? 0) : 0.0;
                 $insentifAcc = (float) ($existing?->insentif_acc ?? 0);
                 $bonusAbsen = (float) ($existing?->bonus_absen ?? 0);
                 $hutang = (float) ($existing?->hutang ?? 0);
-                $pengeluaran = (float) ($existing?->pengeluaran ?? 0);
+                $pengeluaran = $existing !== null
+                    ? (float) $existing->pengeluaran
+                    : (float) ($auto['kasbon'] ?? 0);
                 $total = Payroll::computeTotal(
                     $gapok,
+                    $insentifPic,
                     $auto['insentif_hp'],
                     $auto['service_incentive'],
                     $insentifAcc,
@@ -67,8 +72,10 @@ class PayrollLocker
                         'position_snapshot' => $employee->position,
                         'is_promotor' => $auto['is_promotor'],
                         'is_technician' => $auto['is_technician'],
+                        'is_pic' => $isPic,
                         'present_days' => $auto['present_days'],
                         'gapok' => $gapok,
+                        'insentif_pic' => $insentifPic,
                         'closing_qty' => $auto['closing_qty'],
                         'insentif_hp' => $auto['insentif_hp'],
                         'service_profit' => $auto['service_profit'],
@@ -90,6 +97,93 @@ class PayrollLocker
     }
 
     /**
+     * Hitung ulang draf: gapok, kasbon, hadir, HP, servis dari sumber.
+     * ACC, bonus, hutang, PIC, dan catatan tetap. Slip terkunci dilewati.
+     *
+     * @param  Collection<int, Employee>  $employees  keyed by id
+     * @return int jumlah slip yang dihitung ulang
+     */
+    public function recalculateDrafts(Collection $employees, int $year, int $month, User $actor): int
+    {
+        $autoByEmployee = $this->calculator->computeAutoBatch($employees->values(), $year, $month);
+        $picAutoByEmployee = $this->calculator->computePicFromProfitShareBatch($employees->values(), $year, $month);
+        $now = now();
+        $updated = 0;
+
+        DB::transaction(function () use ($employees, $autoByEmployee, $picAutoByEmployee, $year, $month, $actor, $now, &$updated) {
+            foreach ($employees as $employee) {
+                $existing = Payroll::query()
+                    ->where('employee_id', $employee->id)
+                    ->where('year', $year)
+                    ->where('month', $month)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($existing && $existing->isLocked()) {
+                    continue;
+                }
+
+                $auto = $autoByEmployee[$employee->id] ?? $this->calculator->emptyAuto($employee);
+                $isPic = (bool) ($auto['is_pic'] ?? $employee->hasPosition(Employee::POS_PIC));
+                $gapok = (float) $auto['gapok'];
+                $pengeluaran = (float) ($auto['kasbon'] ?? 0);
+                $insentifPic = $isPic
+                    ? (float) ($existing?->insentif_pic ?? ($picAutoByEmployee[$employee->id] ?? 0))
+                    : 0.0;
+                $insentifAcc = (float) ($existing?->insentif_acc ?? 0);
+                $bonusAbsen = (float) ($existing?->bonus_absen ?? 0);
+                $hutang = (float) ($existing?->hutang ?? 0);
+                $total = Payroll::computeTotal(
+                    $gapok,
+                    $insentifPic,
+                    $auto['insentif_hp'],
+                    $auto['service_incentive'],
+                    $insentifAcc,
+                    $bonusAbsen,
+                    $hutang,
+                    $pengeluaran,
+                );
+
+                Payroll::query()->updateOrCreate(
+                    [
+                        'employee_id' => $employee->id,
+                        'year' => $year,
+                        'month' => $month,
+                    ],
+                    [
+                        'branch_id' => $employee->branch_id,
+                        'status' => Payroll::STATUS_DRAFT,
+                        'position_snapshot' => $employee->position,
+                        'is_promotor' => $auto['is_promotor'],
+                        'is_technician' => $auto['is_technician'],
+                        'is_pic' => $isPic,
+                        'present_days' => $auto['present_days'],
+                        'gapok' => $gapok,
+                        'insentif_pic' => $insentifPic,
+                        'closing_qty' => $auto['closing_qty'],
+                        'insentif_hp' => $auto['insentif_hp'],
+                        'service_profit' => $auto['service_profit'],
+                        'service_incentive' => $auto['service_incentive'],
+                        'insentif_acc' => $insentifAcc,
+                        'bonus_absen' => $bonusAbsen,
+                        'hutang' => $hutang,
+                        'pengeluaran' => $pengeluaran,
+                        'total' => $total,
+                        'note' => $existing?->note,
+                        'calculated_at' => $now,
+                        'locked_at' => null,
+                        'locked_by' => null,
+                        'input_by' => $actor->id,
+                    ]
+                );
+                $updated++;
+            }
+        });
+
+        return $updated;
+    }
+
+    /**
      * Simpan draf slip (manual fields + snapshot auto terkini).
      *
      * @param  Collection<int, Employee>  $employees  keyed by id
@@ -106,16 +200,20 @@ class PayrollLocker
                 /** @var Employee $employee */
                 $employee = $employees->get($employeeId);
                 $auto = $autoByEmployee[$employeeId] ?? $this->calculator->emptyAuto($employee);
-
+                $isPic = (bool) ($auto['is_pic'] ?? $employee->hasPosition(Employee::POS_PIC));
                 $gapok = array_key_exists('gapok', $item)
                     ? (float) $item['gapok']
                     : (float) $auto['gapok'];
+                $insentifPic = $isPic ? (float) ($item['insentif_pic'] ?? 0) : 0.0;
                 $insentifAcc = (float) ($item['insentif_acc'] ?? 0);
                 $bonusAbsen = (float) ($item['bonus_absen'] ?? 0);
                 $hutang = (float) ($item['hutang'] ?? 0);
-                $pengeluaran = (float) ($item['pengeluaran'] ?? 0);
+                $pengeluaran = array_key_exists('pengeluaran', $item)
+                    ? (float) $item['pengeluaran']
+                    : (float) ($auto['kasbon'] ?? 0);
                 $total = Payroll::computeTotal(
                     $gapok,
+                    $insentifPic,
                     $auto['insentif_hp'],
                     $auto['service_incentive'],
                     $insentifAcc,
@@ -136,8 +234,10 @@ class PayrollLocker
                         'position_snapshot' => $employee->position,
                         'is_promotor' => $auto['is_promotor'],
                         'is_technician' => $auto['is_technician'],
+                        'is_pic' => $isPic,
                         'present_days' => $auto['present_days'],
                         'gapok' => $gapok,
+                        'insentif_pic' => $insentifPic,
                         'closing_qty' => $auto['closing_qty'],
                         'insentif_hp' => $auto['insentif_hp'],
                         'service_profit' => $auto['service_profit'],

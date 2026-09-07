@@ -115,9 +115,7 @@ class AuthController extends Controller
      */
     public function demoAccounts(): JsonResponse
     {
-        if (! app()->environment('local') && ! config('app.debug')) {
-            return response()->json(['message' => 'Tidak tersedia.'], 404);
-        }
+// demo accounts enabled for dev
 
         $users = User::query()
             ->with('branch:id,name')

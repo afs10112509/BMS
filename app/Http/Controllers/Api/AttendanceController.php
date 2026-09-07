@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Employee;
 use App\Models\EmployeeAttendance;
+use App\Services\AuditLogger;
 use App\Services\PayrollLockChecker;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -16,6 +17,7 @@ class AttendanceController extends Controller
 {
     public function __construct(
         protected PayrollLockChecker $payrollLockChecker,
+        protected AuditLogger $auditLogger,
     ) {}
 
     public function daily(Request $request): JsonResponse
@@ -124,6 +126,22 @@ class AttendanceController extends Controller
             $counts[$item['status']]++;
         }
 
+        $this->auditLogger->logTable(
+            $user,
+            'UPDATE',
+            'employee_attendances',
+            (int) ($branchId ?: 0),
+            null,
+            [
+                'batch' => true,
+                'branch_id' => $branchId,
+                'date' => $date,
+                'employee_count' => count($data['items']),
+                'counts' => $counts,
+            ],
+            $branchId ? (int) $branchId : null,
+        );
+
         return response()->json([
             'message' => 'Absensi harian berhasil disimpan.',
             'meta' => [
@@ -162,12 +180,30 @@ class AttendanceController extends Controller
 
         $this->payrollLockChecker->assertEmployeeDateOpen($employeeId, $date);
 
+        $employee = Employee::query()->find($employeeId);
+        $branchId = $employee?->branch_id ? (int) $employee->branch_id : null;
+        $empName = $employee?->name ?? ('#'.$employeeId);
+
         $status = $data['status'] ?? null;
         if ($status === null || $status === '') {
-            EmployeeAttendance::query()
+            $existing = EmployeeAttendance::query()
                 ->where('employee_id', $employeeId)
                 ->whereDate('attendance_date', $date)
-                ->delete();
+                ->first();
+            if ($existing) {
+                $old = $existing->toArray();
+                $old['employee_name'] = $empName;
+                $existing->delete();
+                $this->auditLogger->logTable(
+                    $user,
+                    'DELETE',
+                    'employee_attendances',
+                    (int) ($old['id'] ?? 0),
+                    $old,
+                    null,
+                    $branchId,
+                );
+            }
 
             return response()->json([
                 'message' => 'Absensi tanggal tersebut dihapus.',
@@ -177,6 +213,15 @@ class AttendanceController extends Controller
                     'status' => null,
                 ],
             ]);
+        }
+
+        $existing = EmployeeAttendance::query()
+            ->where('employee_id', $employeeId)
+            ->whereDate('attendance_date', $date)
+            ->first();
+        $old = $existing?->toArray();
+        if ($old) {
+            $old['employee_name'] = $empName;
         }
 
         $att = EmployeeAttendance::query()->updateOrCreate(
@@ -189,6 +234,18 @@ class AttendanceController extends Controller
                 'note' => $data['note'] ?? null,
                 'input_by' => $user->id,
             ]
+        );
+
+        $new = $att->toArray();
+        $new['employee_name'] = $empName;
+        $new['branch_id'] = $branchId;
+        $this->auditLogger->log(
+            $user,
+            $existing ? 'UPDATE' : 'CREATE',
+            $att,
+            $old,
+            $new,
+            $branchId,
         );
 
         return response()->json([
@@ -303,7 +360,8 @@ class AttendanceController extends Controller
             ->with('branch:id,name,type')
             ->join('branches', 'branches.id', '=', 'employees.branch_id')
             ->where('employees.status', 'active')
-            ->withoutManagement()
+            // PIC boleh diabsen; hanya Owner yang disembunyikan.
+            ->withoutOwner()
             ->orderBy('branches.name')
             ->orderBy('employees.name')
             ->select('employees.*');

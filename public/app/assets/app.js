@@ -81,6 +81,8 @@ createApp({
     const bootLoading = ref(!!token.value);
     const toasts = ref([]);
     const showPassword = ref(false);
+    const sidebarOpen = ref(false);
+    function toggleSidebar() { sidebarOpen.value = !sidebarOpen.value; }
     const navGroups = reactive({
       utama: true,
       transfer: true,
@@ -3606,6 +3608,7 @@ createApp({
     }
 
     async function go(next) {
+      sidebarOpen.value = false;
       page.value = next;
       syncNavGroups(next);
       if (next === 'profile') fillProfileForm();
@@ -3787,6 +3790,8 @@ createApp({
       onOwnerCategoryBranchChange,
       navGroups,
       toggleNavGroup,
+      sidebarOpen,
+      toggleSidebar,
       formatRp,
       formatDate,
       formatDateTime,
@@ -4030,18 +4035,24 @@ createApp({
       </div>
     </div>
 
-    <!-- APP -->
+    <!-- APP SHELL -->
     <div v-else class="app-shell">
-      <aside class="sidebar">
-        <div class="logo brand">BMS</div>
-        <div class="logo-sub">Belawa Management System</div>
+      <!-- Backdrop Drawer Overlay -->
+      <div v-if="sidebarOpen" class="sidebar-backdrop" @click="sidebarOpen = false"></div>
 
-        <div class="nav-group">
-          <button type="button" class="nav-group-toggle" :class="{open: navGroups.utama}" @click="toggleNavGroup('utama')">
-            <span>Utama</span>
-            <span class="chev"></span>
-          </button>
-          <div v-show="navGroups.utama" class="nav-group-items">
+      <!-- Slide-out Drawer Sidebar (9router Model) -->
+      <aside class="sidebar-drawer" :class="{ 'open': sidebarOpen }">
+        <div class="drawer-header">
+          <div>
+            <div class="logo brand">BMS</div>
+            <div class="logo-sub">Belawa Management System</div>
+          </div>
+          <button type="button" class="drawer-close-btn" @click="sidebarOpen = false" title="Tutup Menu">✕</button>
+        </div>
+
+        <div class="nav-section">
+          <div class="nav-section-title">Utama</div>
+          <div class="nav-group-items">
             <button class="nav-btn" :class="{active: page==='dashboard'}" @click="go('dashboard')">
               <svg class="nav-ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
               <span>Dasbor</span>
@@ -4065,12 +4076,9 @@ createApp({
           </div>
         </div>
 
-        <div class="nav-group">
-          <button type="button" class="nav-group-toggle" :class="{open: navGroups.transfer}" @click="toggleNavGroup('transfer')">
-            <span>Transfer</span>
-            <span class="chev"></span>
-          </button>
-          <div v-show="navGroups.transfer" class="nav-group-items">
+        <div class="nav-section">
+          <div class="nav-section-title">Transfer</div>
+          <div class="nav-group-items">
             <button class="nav-btn" :class="{active: page==='internal-transfer'}" @click="go('internal-transfer')">
               <svg class="nav-ico" viewBox="0 0 24 24"><path d="M4 12h16"/><path d="M12 4v16"/><circle cx="12" cy="12" r="9"/></svg>
               <span>Antar Akun</span>
@@ -4082,12 +4090,9 @@ createApp({
           </div>
         </div>
 
-        <div v-if="canAccessKonterMenu" class="nav-group">
-          <button type="button" class="nav-group-toggle" :class="{open: navGroups.konter}" @click="toggleNavGroup('konter')">
-            <span>Konter</span>
-            <span class="chev"></span>
-          </button>
-          <div v-show="navGroups.konter" class="nav-group-items">
+        <div v-if="canAccessKonterMenu" class="nav-section">
+          <div class="nav-section-title">Konter</div>
+          <div class="nav-group-items">
             <button v-if="canAccessClosings" class="nav-btn" :class="{active: page==='services'}" @click="go('services')">
               <svg class="nav-ico" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
               <span>Catatan Servis</span>
@@ -4103,12 +4108,9 @@ createApp({
           </div>
         </div>
 
-        <div v-if="canAccessWorkshopWages" class="nav-group">
-          <button type="button" class="nav-group-toggle" :class="{open: navGroups.bengkel}" @click="toggleNavGroup('bengkel')">
-            <span>Bengkel</span>
-            <span class="chev"></span>
-          </button>
-          <div v-show="navGroups.bengkel" class="nav-group-items">
+        <div v-if="canAccessWorkshopWages" class="nav-section">
+          <div class="nav-section-title">Bengkel</div>
+          <div class="nav-group-items">
             <button class="nav-btn" :class="{active: page==='workshop-wages'}" @click="go('workshop-wages')">
               <svg class="nav-ico" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
               <span>Upah Kerja</span>
@@ -4116,12 +4118,9 @@ createApp({
           </div>
         </div>
 
-        <div v-if="isOwner || canAccessAttendance" class="nav-group">
-          <button type="button" class="nav-group-toggle" :class="{open: navGroups.karyawan}" @click="toggleNavGroup('karyawan')">
-            <span>Karyawan</span>
-            <span class="chev"></span>
-          </button>
-          <div v-show="navGroups.karyawan" class="nav-group-items">
+        <div v-if="isOwner || canAccessAttendance" class="nav-section">
+          <div class="nav-section-title">Karyawan</div>
+          <div class="nav-group-items">
             <button v-if="canAccessAttendance" class="nav-btn" :class="{active: page==='attendance'}" @click="go('attendance')">
               <svg class="nav-ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/></svg>
               <span>Absensi</span>
@@ -4133,12 +4132,9 @@ createApp({
           </div>
         </div>
 
-        <div class="nav-group">
-          <button type="button" class="nav-group-toggle" :class="{open: navGroups.laporan}" @click="toggleNavGroup('laporan')">
-            <span>Laporan</span>
-            <span class="chev"></span>
-          </button>
-          <div v-show="navGroups.laporan" class="nav-group-items">
+        <div class="nav-section">
+          <div class="nav-section-title">Laporan</div>
+          <div class="nav-group-items">
             <button class="nav-btn" :class="{active: page==='reports'}" @click="go('reports')">
               <svg class="nav-ico" viewBox="0 0 24 24"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 15v4"/><path d="M12 11v8"/><path d="M16 7v12"/></svg>
               <span>Buat Laporan</span>
@@ -4146,12 +4142,9 @@ createApp({
           </div>
         </div>
 
-        <div v-if="isOwner" class="nav-group">
-          <button type="button" class="nav-group-toggle" :class="{open: navGroups.sistem}" @click="toggleNavGroup('sistem')">
-            <span>Sistem</span>
-            <span class="chev"></span>
-          </button>
-          <div v-show="navGroups.sistem" class="nav-group-items">
+        <div v-if="isOwner" class="nav-section">
+          <div class="nav-section-title">Sistem</div>
+          <div class="nav-group-items">
             <button class="nav-btn" :class="{active: page==='kelola'}" @click="go('kelola')">
               <svg class="nav-ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0114 0"/><path d="M19 4v4"/><path d="M17 6h4"/></svg>
               <span>Kelola</span>
@@ -4170,16 +4163,27 @@ createApp({
 
       <main class="main">
         <header class="topbar">
-          <div class="topbar-user">
-            <div class="avatar" aria-hidden="true">{{ userInitials }}</div>
-            <div class="topbar-meta">
-              <strong>{{ user?.name }}</strong>
-              <span class="role-chip">{{ roleLabel }}</span>
+          <div class="topbar-left">
+            <button class="menu-toggle-btn" type="button" @click="toggleSidebar" title="Buka Menu Navigasi (☰)">
+              <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
+            <div class="topbar-brand">
+              <span class="brand-title">BMS</span>
+              <span class="brand-subtitle">Belawa Management</span>
             </div>
           </div>
-          <div class="topbar-actions">
-            <button class="btn btn-ghost btn-sm" type="button" :class="{active: page==='profile'}" @click="go('profile')">Akun</button>
-            <button class="btn btn-ghost btn-sm" type="button" @click="doLogout">Keluar</button>
+          <div class="topbar-right">
+            <div class="topbar-user">
+              <div class="avatar" aria-hidden="true">{{ userInitials }}</div>
+              <div class="topbar-meta">
+                <strong>{{ user?.name }}</strong>
+                <span class="role-chip">{{ roleLabel }}</span>
+              </div>
+            </div>
+            <div class="topbar-actions">
+              <button class="btn btn-ghost btn-sm" type="button" :class="{active: page==='profile'}" @click="go('profile')">Akun</button>
+              <button class="btn btn-ghost btn-sm" type="button" @click="doLogout">Keluar</button>
+            </div>
           </div>
         </header>
 

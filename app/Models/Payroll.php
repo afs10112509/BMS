@@ -16,8 +16,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'position_snapshot',
     'is_promotor',
     'is_technician',
+    'is_pic',
     'present_days',
     'gapok',
+    'insentif_pic',
     'closing_qty',
     'insentif_hp',
     'service_profit',
@@ -54,8 +56,10 @@ class Payroll extends Model
             'month' => 'integer',
             'is_promotor' => 'boolean',
             'is_technician' => 'boolean',
+            'is_pic' => 'boolean',
             'present_days' => 'integer',
             'gapok' => 'decimal:2',
+            'insentif_pic' => 'decimal:2',
             'closing_qty' => 'integer',
             'insentif_hp' => 'decimal:2',
             'service_profit' => 'decimal:2',
@@ -121,8 +125,14 @@ class Payroll extends Model
         return str_contains(self::normalizePosition($position), 'teknisi');
     }
 
+    public static function isPicPosition(?string $position): bool
+    {
+        return str_contains(self::normalizePosition($position), 'pic');
+    }
+
     public static function computeTotal(
         float|int|string $gapok,
+        float|int|string $insentifPic,
         float|int|string $insentifHp,
         float|int|string $serviceIncentive,
         float|int|string $insentifAcc,
@@ -130,7 +140,7 @@ class Payroll extends Model
         float|int|string $hutang,
         float|int|string $pengeluaran,
     ): string {
-        $credits = Money::add($gapok, $insentifHp, $serviceIncentive, $insentifAcc, $bonusAbsen);
+        $credits = Money::add($gapok, $insentifPic, $insentifHp, $serviceIncentive, $insentifAcc, $bonusAbsen);
         $debits = Money::add($hutang, $pengeluaran);
 
         return Money::sub($credits, $debits);

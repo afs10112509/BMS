@@ -16,8 +16,20 @@ final class Money
     public static function of(float|int|string $value): string
     {
         if (is_string($value)) {
-            $value = trim(str_replace(',', '.', $value));
-            if ($value === '' || ! is_numeric($value)) {
+            $value = trim($value);
+            if ($value === '') {
+                return number_format(0, self::SCALE, '.', '');
+            }
+
+            // Format id-ID: 1.964.000 atau 1.964.000,50
+            if (preg_match('/^-?\d{1,3}(\.\d{3})+(,\d+)?$/', $value)) {
+                $value = str_replace('.', '', $value);
+                $value = str_replace(',', '.', $value);
+            } else {
+                $value = str_replace(',', '.', $value);
+            }
+
+            if (! is_numeric($value)) {
                 return number_format(0, self::SCALE, '.', '');
             }
 

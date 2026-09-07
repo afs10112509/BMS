@@ -15,6 +15,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'physical_balance',
     'difference',
     'reconciliation_date',
+    'adjusted_at',
+    'adjusted_by',
+    'adjustment_transaction_id',
 ])]
 class Reconciliation extends Model
 {
@@ -29,7 +32,8 @@ class Reconciliation extends Model
             'system_balance' => 'decimal:2',
             'physical_balance' => 'decimal:2',
             'difference' => 'decimal:2',
-            'reconciliation_date' => 'date',
+            'reconciliation_date' => 'date:Y-m-d',
+            'adjusted_at' => 'datetime',
         ];
     }
 
@@ -46,5 +50,20 @@ class Reconciliation extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function adjustedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'adjusted_by');
+    }
+
+    public function adjustmentTransaction(): BelongsTo
+    {
+        return $this->belongsTo(Transaction::class, 'adjustment_transaction_id');
+    }
+
+    public function isAdjusted(): bool
+    {
+        return $this->adjusted_at !== null;
     }
 }
