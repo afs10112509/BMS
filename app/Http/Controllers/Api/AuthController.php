@@ -122,9 +122,9 @@ class AuthController extends Controller
     /**
      * Daftar akun uji dari database — hanya untuk lingkungan non-produksi (development/local).
      */
-    public function demoAccounts(): JsonResponse
+    public function demoAccounts(Request $request): JsonResponse
     {
-        if (app()->isProduction() || config('app.env') === 'production') {
+        if (app()->isProduction() || config('app.env') === 'production' || str_contains($request->getHost(), 'bms.adbr.my.id')) {
             return response()->json([
                 'message' => 'Akun uji tidak tersedia di lingkungan produksi.',
                 'password_hint' => '',
