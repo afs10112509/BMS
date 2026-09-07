@@ -3806,6 +3806,7 @@ createApp({
       addTxBatchRow,
       removeTxBatchRow,
       submitBatchTransaction,
+      refreshCurrent,
       txFilter,
       txMeta,
       transferForm,
@@ -4257,6 +4258,10 @@ createApp({
               </div>
             </div>
             <div class="topbar-actions">
+              <button class="btn btn-ghost btn-sm" type="button" :disabled="loading" @click="refreshCurrent" title="Segarkan Data Halaman Ini">
+                <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="margin-right:3px; vertical-align:-2px;"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                Segarkan
+              </button>
               <button class="btn btn-ghost btn-sm" type="button" :class="{active: page==='profile'}" @click="go('profile')">Akun</button>
               <button class="btn btn-ghost btn-sm" type="button" @click="doLogout">Keluar</button>
             </div>
