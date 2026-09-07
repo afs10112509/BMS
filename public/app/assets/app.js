@@ -833,7 +833,7 @@ createApp({
         const data = await api('/auth/login', {
           method: 'POST',
           body: JSON.stringify({
-            email: loginForm.email,
+            email: (loginForm.email || '').trim(),
             password: loginForm.password,
           }),
         });
