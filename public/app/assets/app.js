@@ -294,6 +294,7 @@ createApp({
       { value: 'teknisi', label: 'Teknisi' },
     ];
 
+    const kasbonCategories = ref([]);
     const employeeForm = reactive({
       id: null,
       branch_id: '',
@@ -303,6 +304,7 @@ createApp({
       status: 'active',
       joined_at: '',
       notes: '',
+      kasbon_category_id: '',
     });
 
     const employeeFilter = reactive({
@@ -1591,6 +1593,7 @@ createApp({
       const qs = params.toString();
       const data = await api(`/employees${qs ? `?${qs}` : ''}`);
       employees.value = data.data || [];
+      kasbonCategories.value = data.kasbon_categories || [];
     }
 
     async function loadClosingBoard() {
@@ -2628,6 +2631,7 @@ createApp({
       employeeForm.status = 'active';
       employeeForm.joined_at = '';
       employeeForm.notes = '';
+      employeeForm.kasbon_category_id = '';
     }
 
     function toggleEmployeePosition(code) {
@@ -2677,6 +2681,7 @@ createApp({
       employeeForm.status = emp.status || 'active';
       employeeForm.joined_at = emp.joined_at ? String(emp.joined_at).slice(0, 10) : '';
       employeeForm.notes = emp.notes || '';
+      employeeForm.kasbon_category_id = emp.kasbon_category_id || emp.kasbon_category?.id || '';
       scrollMainTop('#employee-form-card');
       toast('Data dimuat ke form. Ubah lalu klik Perbarui.', 'success');
     }
@@ -2696,6 +2701,7 @@ createApp({
           status: employeeForm.status,
           joined_at: employeeForm.joined_at || null,
           notes: employeeForm.notes.trim() || null,
+          kasbon_category_id: employeeForm.kasbon_category_id ? Number(employeeForm.kasbon_category_id) : null,
         };
         if (employeeForm.id) {
           await api(`/employees/${employeeForm.id}`, { method: 'PUT', body: JSON.stringify(payload) });
@@ -3831,6 +3837,7 @@ createApp({
       categoryForm,
       admins,
       employees,
+      kasbonCategories,
       kelolaTab,
       employeePositionOptions,
       employeeForm,
@@ -5602,6 +5609,13 @@ createApp({
               </div>
               <div class="tx-form-main">
                 <div class="field">
+                  <label>Kategori Kasbon <span class="opt">(terikat otomatis)</span></label>
+                  <select v-model="employeeForm.kasbon_category_id">
+                    <option value="">Otomatis (Kasbon {{ employeeForm.name || 'Karyawan' }})</option>
+                    <option v-for="kc in kasbonCategories" :key="kc.id" :value="kc.id">{{ kc.name }}</option>
+                  </select>
+                </div>
+                <div class="field">
                   <label>Status</label>
                   <select v-model="employeeForm.status">
                     <option value="active">Aktif</option>
@@ -5612,7 +5626,7 @@ createApp({
                   <label>Tanggal Masuk</label>
                   <input type="date" v-model="employeeForm.joined_at" />
                 </div>
-                <div class="field" style="grid-column: span 2">
+                <div class="field">
                   <label>Catatan</label>
                   <input v-model="employeeForm.notes" placeholder="Opsional" />
                 </div>
@@ -5666,6 +5680,7 @@ createApp({
                     <th>Cabang</th>
                     <th>Jabatan</th>
                     <th>Telepon</th>
+                    <th>Kategori Kasbon</th>
                     <th>Status</th>
                     <th>Aksi</th>
                   </tr>
@@ -5678,6 +5693,11 @@ createApp({
                     <td>{{ formatEmployeePositions(e) }}</td>
                     <td>{{ e.phone || '—' }}</td>
                     <td>
+                      <span style="display:inline-block; padding:3px 8px; border-radius:4px; font-size:12px; font-weight:600; background:#e0f2fe; color:#0369a1;">
+                        {{ e.kasbon_category?.name || 'Otomatis' }}
+                      </span>
+                    </td>
+                    <td>
                       <span class="badge" :class="e.status==='active' ? 'badge-approved' : 'badge-rejected'">
                         {{ e.status==='active' ? 'Aktif' : 'Nonaktif' }}
                       </span>
@@ -5688,7 +5708,7 @@ createApp({
                     </td>
                   </tr>
                   <tr v-if="!employees.length">
-                    <td colspan="7">Belum ada data karyawan.</td>
+                    <td colspan="8">Belum ada data karyawan.</td>
                   </tr>
                 </tbody>
               </table>
