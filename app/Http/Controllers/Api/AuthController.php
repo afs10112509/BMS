@@ -22,15 +22,9 @@ class AuthController extends Controller
         $email = strtolower(trim($credentials['email']));
         $user = User::query()->whereRaw('LOWER(email) = ?', [$email])->first();
 
-        if (! $user) {
+        if (! $user || ! Hash::check($credentials['password'], $user->password)) {
             throw ValidationException::withMessages([
-                'email' => ['User email tidak ditemukan di database.'],
-            ]);
-        }
-
-        if (! Hash::check($credentials['password'], $user->password)) {
-            throw ValidationException::withMessages([
-                'email' => ['Password tidak cocok.'],
+                'email' => ['Email atau kata sandi tidak sesuai.'],
             ]);
         }
 
