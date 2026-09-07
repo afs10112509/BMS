@@ -9,6 +9,7 @@ use App\Models\Employee;
 use App\Models\EmployeeDailyClosing;
 use App\Models\EmployeeMonthlyTarget;
 use App\Services\AuditLogger;
+use App\Services\NotificationDispatcher;
 use App\Services\PayrollLockChecker;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -19,6 +20,7 @@ class ClosingBoardController extends Controller
     public function __construct(
         protected PayrollLockChecker $payrollLockChecker,
         protected AuditLogger $auditLogger,
+        protected NotificationDispatcher $notifier,
     ) {}
 
     public function board(Request $request): JsonResponse
@@ -402,6 +404,22 @@ class ClosingBoardController extends Controller
             ],
             (int) $employee->branch_id,
         );
+
+        $this->notifier->notifyClosingSaved([
+            'employee_id' => $employee->id,
+            'employee_name' => $employee->name,
+            'branch_id' => $employee->branch_id,
+            'branch_name' => $employee->branch?->name,
+            'phone' => $employee->phone,
+            'closing_date' => $date,
+            'qty' => $qty,
+            'input_by_name' => $user->name,
+            'message' => "📌 *Laporan Closingan Cabang {$employee->branch?->name}*\n"
+                . "Oleh: {$employee->name}\n"
+                . "Tanggal: {$date}\n"
+                . "Qty Target: {$qty}\n"
+                . "Diinput Oleh: {$user->name}",
+        ]);
 
         return response()->json([
             'message' => 'Closingan berhasil disimpan.',

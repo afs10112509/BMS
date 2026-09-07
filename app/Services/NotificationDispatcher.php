@@ -13,6 +13,11 @@ class NotificationDispatcher
         $this->dispatch('permohonan_transfer', $payload);
     }
 
+    public function notifyClosingSaved(array $payload): void
+    {
+        $this->dispatch('closing_saved', $payload);
+    }
+
     public function notifyReconciliationDifference(array $payload): void
     {
         $this->dispatch('selisih_rekonsiliasi', $payload);
