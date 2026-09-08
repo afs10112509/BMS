@@ -1231,8 +1231,196 @@ tfoot td { background: #F8FAFC; border-top: 2px solid var(--line); font-weight: 
   to { opacity: 1; transform: none; }
 }
 
-/* Modal */
-.modal-backdrop {
+/* User Directory Table Styling (Mirip Screenshot UI) */
+.directory-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.directory-title-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.directory-count-badge {
+  background: #CCFBF1;
+  color: #0F766E;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 12px;
+}
+.directory-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.user-avatar-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.user-avatar-circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0F766E, #0D9488);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.user-info-text {
+  display: flex;
+  flex-direction: column;
+}
+.user-name-text {
+  font-weight: 700;
+  color: var(--text-dark);
+  font-size: 0.9rem;
+}
+.user-sub-text {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.role-pill-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.role-pill-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #F1F5F9;
+  color: #475569;
+}
+.role-pill-badge.pic { background: #FEF3C7; color: #92400E; }
+.role-pill-badge.teknisi { background: #E0F2FE; color: #0369A1; }
+.role-pill-badge.kasir { background: #F3E8FF; color: #6B21A8; }
+.role-pill-badge.promotor { background: #FCE7F3; color: #9D174D; }
+.role-pill-badge.frontliner { background: #E0E7FF; color: #3730A3; }
+.status-pill-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+.status-pill-badge.active {
+  background: #DCFCE7;
+  color: #15803D;
+}
+.status-pill-badge.inactive {
+  background: #F1F5F9;
+  color: #64748B;
+}
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.employee-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+  display: grid;
+  place-items: center;
+  z-index: 100;
+  padding: 16px;
+}
+.employee-modal-card {
+  width: min(560px, 100%);
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.employee-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.employee-modal-header h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-dark);
+}
+.employee-modal-header p {
+  margin: 2px 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.employee-modal-close {
+  background: transparent;
+  border: none;
+  font-size: 1.25rem;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.employee-modal-close:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text);
+}
+.employee-modal-body {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 75vh;
+  overflow-y: auto;
+}
+.employee-modal-body .field label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-dark);
+  margin-bottom: 6px;
+  display: block;
+}
+.employee-modal-body .field input,
+.employee-modal-body .field select {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  font-size: 0.9rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.employee-modal-body .field input:focus,
+.employee-modal-body .field select:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
+}
+.employee-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  background: #f8fafc;
+  border-top: 1px solid var(--line);
+}
   position: fixed; inset: 0; background: rgba(15,23,42,.45); display: grid; place-items: center;
   z-index: 40; padding: 16px;
 }

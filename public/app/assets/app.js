@@ -730,12 +730,42 @@ const app = createApp({
       id: null,
       branch_id: '',
       name: '',
+      nickname: '',
+      nik: '',
+      gender: '',
       phone: '',
+      birth_place: '',
+      birth_date: '',
+      bank_name: '',
+      bank_account_name: '',
+      bank_account_number: '',
+      emergency_contact: '',
+      address: '',
       positions: [],
       status: 'active',
       joined_at: '',
       notes: '',
+      kasbon_category_id: '',
     });
+
+    const kasbonCategories = computed(() => {
+      return (categories.value || []).filter((c) => {
+        return c.type === 'expense' && (c.name || '').toLowerCase().startsWith('kasbon');
+      });
+    });
+
+    const showEmployeeDetailModal = ref(false);
+    const selectedEmployeeDetail = ref(null);
+
+    function viewEmployeeDetail(emp) {
+      selectedEmployeeDetail.value = emp;
+      showEmployeeDetailModal.value = true;
+    }
+
+    function closeEmployeeDetailModal() {
+      showEmployeeDetailModal.value = false;
+      selectedEmployeeDetail.value = null;
+    }
 
     const employeeFilter = reactive({
       branch_id: '',
@@ -4820,15 +4850,38 @@ const app = createApp({
       return 'value-expense';
     }
 
+    const showEmployeeModal = ref(false);
+
+    function openAddEmployeeModal() {
+      resetEmployeeForm();
+      showEmployeeModal.value = true;
+    }
+
+    function closeEmployeeModal() {
+      showEmployeeModal.value = false;
+      resetEmployeeForm();
+    }
+
     function resetEmployeeForm() {
       employeeForm.id = null;
       employeeForm.branch_id = '';
       employeeForm.name = '';
+      employeeForm.nickname = '';
+      employeeForm.nik = '';
+      employeeForm.gender = '';
       employeeForm.phone = '';
+      employeeForm.birth_place = '';
+      employeeForm.birth_date = '';
+      employeeForm.bank_name = '';
+      employeeForm.bank_account_name = '';
+      employeeForm.bank_account_number = '';
+      employeeForm.emergency_contact = '';
+      employeeForm.address = '';
       employeeForm.positions = [];
       employeeForm.status = 'active';
       employeeForm.joined_at = '';
       employeeForm.notes = '';
+      employeeForm.kasbon_category_id = '';
     }
 
     function toggleEmployeePosition(code) {
@@ -4873,13 +4926,23 @@ const app = createApp({
       employeeForm.id = emp.id;
       employeeForm.branch_id = branchId != null && branchId !== '' ? Number(branchId) : '';
       employeeForm.name = emp.name || '';
+      employeeForm.nickname = emp.nickname || '';
+      employeeForm.nik = emp.nik || '';
+      employeeForm.gender = emp.gender || '';
       employeeForm.phone = emp.phone || '';
+      employeeForm.birth_place = emp.birth_place || '';
+      employeeForm.birth_date = emp.birth_date ? String(emp.birth_date).slice(0, 10) : '';
+      employeeForm.bank_name = emp.bank_name || '';
+      employeeForm.bank_account_name = emp.bank_account_name || '';
+      employeeForm.bank_account_number = emp.bank_account_number || '';
+      employeeForm.emergency_contact = emp.emergency_contact || '';
+      employeeForm.address = emp.address || '';
       employeeForm.positions = Array.isArray(emp.positions) ? [...emp.positions] : [];
       employeeForm.status = emp.status || 'active';
       employeeForm.joined_at = emp.joined_at ? String(emp.joined_at).slice(0, 10) : '';
       employeeForm.notes = emp.notes || '';
-      scrollMainTop('#employee-form-card');
-      toast('Data dimuat ke form. Ubah lalu klik Perbarui.', 'success');
+      employeeForm.kasbon_category_id = emp.kasbon_category_id || emp.kasbon_category?.id || '';
+      showEmployeeModal.value = true;
     }
 
     async function submitEmployee() {
@@ -4892,11 +4955,22 @@ const app = createApp({
         const payload = {
           branch_id: Number(employeeForm.branch_id),
           name: employeeForm.name.trim(),
+          nickname: employeeForm.nickname ? employeeForm.nickname.trim() : null,
+          nik: employeeForm.nik ? employeeForm.nik.trim() : null,
+          gender: employeeForm.gender || null,
           phone: employeeForm.phone.trim(),
+          birth_place: employeeForm.birth_place ? employeeForm.birth_place.trim() : null,
+          birth_date: employeeForm.birth_date || null,
+          bank_name: employeeForm.bank_name ? employeeForm.bank_name.trim() : null,
+          bank_account_name: employeeForm.bank_account_name ? employeeForm.bank_account_name.trim() : null,
+          bank_account_number: employeeForm.bank_account_number ? employeeForm.bank_account_number.trim() : null,
+          emergency_contact: employeeForm.emergency_contact ? employeeForm.emergency_contact.trim() : null,
+          address: employeeForm.address ? employeeForm.address.trim() : null,
           positions: [...employeeForm.positions],
           status: employeeForm.status,
           joined_at: employeeForm.joined_at || null,
-          notes: employeeForm.notes.trim() || null,
+          notes: employeeForm.notes ? employeeForm.notes.trim() : null,
+          kasbon_category_id: employeeForm.kasbon_category_id ? Number(employeeForm.kasbon_category_id) : null,
         };
         if (employeeForm.id) {
           await api(`/employees/${employeeForm.id}`, { method: 'PUT', body: JSON.stringify(payload) });
@@ -4905,7 +4979,7 @@ const app = createApp({
           await api('/employees', { method: 'POST', body: JSON.stringify(payload) });
           toast('Karyawan ditambahkan.', 'success');
         }
-        resetEmployeeForm();
+        closeEmployeeModal();
         await loadEmployees();
       } catch (_) {
       } finally {
@@ -7418,6 +7492,14 @@ const app = createApp({
     onBeforeUnmount(() => destroyCharts());
 
     return {
+      showEmployeeModal,
+      openAddEmployeeModal,
+      closeEmployeeModal,
+      kasbonCategories,
+      showEmployeeDetailModal,
+      selectedEmployeeDetail,
+      viewEmployeeDetail,
+      closeEmployeeDetailModal,
       sidebarOpen,
       toggleSidebar,
       closeSidebar,
@@ -10806,28 +10888,87 @@ const app = createApp({
             </div>
           </div>
 
-          <div id="employee-form-card" class="card card-tx-form">
-            <div class="panel-title">{{ employeeForm.id ? 'Ubah Karyawan' : 'Tambah Karyawan' }}</div>
-            <div class="tx-form">
-              <div class="tx-form-main">
-                <div class="field">
-                  <label>Cabang <span class="opt">(wajib)</span></label>
-                  <select v-model="employeeForm.branch_id">
-                    <option disabled value="">Pilih cabang karyawan</option>
-                    <option v-for="b in branches" :key="b.id" :value="b.id">{{ b.name }}</option>
-                  </select>
+          <!-- Employee Form Dialog Modal (Lengkap All 22 Fields) -->
+          <div v-if="showEmployeeModal" class="employee-modal-overlay" @click.self="closeEmployeeModal">
+            <div class="employee-modal-card" style="max-width:680px">
+              <div class="employee-modal-header">
+                <div>
+                  <h3>{{ employeeForm.id ? 'Ubah Data Karyawan' : 'Tambah Karyawan Baru' }}</h3>
+                  <p>Lengkapi profil, jabatan, rekening, dan penyesuaian kasbon karyawan di bawah ini.</p>
+                </div>
+                <button class="employee-modal-close" type="button" @click="closeEmployeeModal" title="Tutup">✕</button>
+              </div>
+              <div class="employee-modal-body">
+                <div class="form-section-title" style="font-weight:700; color:var(--brand); font-size:0.85rem; border-bottom:1px solid var(--line); padding-bottom:4px; margin-bottom:8px;">
+                  1. Informasi Identitas & Utama
+                </div>
+                <div class="grid-2">
+                  <div class="field">
+                    <label>Nama Lengkap <span style="color:#EF4444">*</span></label>
+                    <input v-model="employeeForm.name" placeholder="misal: Jane Doe" required />
+                  </div>
+                  <div class="field">
+                    <label>Nama Panggilan</label>
+                    <input v-model="employeeForm.nickname" placeholder="misal: Jane" />
+                  </div>
+                </div>
+                <div class="grid-2">
+                  <div class="field">
+                    <label>Nomor Telepon / WhatsApp <span style="color:#EF4444">*</span></label>
+                    <input v-model="employeeForm.phone" placeholder="08xxxxxxxxxx" required />
+                  </div>
+                  <div class="field">
+                    <label>Cabang Karyawan <span style="color:#EF4444">*</span></label>
+                    <select v-model="employeeForm.branch_id">
+                      <option disabled value="">Pilih cabang karyawan</option>
+                      <option v-for="b in branches" :key="b.id" :value="b.id">{{ b.name }}</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="grid-2">
+                  <div class="field">
+                    <label>NIK (Nomor KTP)</label>
+                    <input v-model="employeeForm.nik" placeholder="16 digit NIK" maxlength="16" />
+                  </div>
+                  <div class="field">
+                    <label>Jenis Kelamin</label>
+                    <select v-model="employeeForm.gender">
+                      <option value="">Pilih jenis kelamin</option>
+                      <option value="male">Laki-Laki</option>
+                      <option value="female">Perempuan</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="grid-2">
+                  <div class="field">
+                    <label>Tempat Lahir</label>
+                    <input v-model="employeeForm.birth_place" placeholder="Kota tempat lahir" />
+                  </div>
+                  <div class="field">
+                    <label>Tanggal Lahir</label>
+                    <input type="date" v-model="employeeForm.birth_date" />
+                  </div>
+                </div>
+                <div class="grid-2">
+                  <div class="field">
+                    <label>Status Karyawan</label>
+                    <select v-model="employeeForm.status">
+                      <option value="active">Aktif</option>
+                      <option value="inactive">Nonaktif</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label>Tanggal Masuk Kerja</label>
+                    <input type="date" v-model="employeeForm.joined_at" />
+                  </div>
+                </div>
+
+                <div class="form-section-title" style="font-weight:700; color:var(--brand); font-size:0.85rem; border-bottom:1px solid var(--line); padding-bottom:4px; margin-top:8px; margin-bottom:8px;">
+                  2. Jabatan / Role Karyawan
                 </div>
                 <div class="field">
-                  <label>Nama <span class="opt">(wajib)</span></label>
-                  <input v-model="employeeForm.name" placeholder="Nama lengkap" />
-                </div>
-                <div class="field">
-                  <label>Telepon <span class="opt">(wajib)</span></label>
-                  <input v-model="employeeForm.phone" placeholder="08xxxxxxxxxx" />
-                </div>
-                <div class="field" style="grid-column: 1 / -1">
-                  <label>Jabatan <span class="opt">(boleh lebih dari satu)</span></label>
-                  <div class="position-pills">
+                  <label>Jabatan <span style="color:var(--muted); font-size:0.78rem;">(Bisa pilih lebih dari 1)</span></label>
+                  <div class="position-pills" style="margin-top:4px;">
                     <button
                       v-for="opt in employeePositionOptions"
                       :key="opt.value"
@@ -10838,61 +10979,161 @@ const app = createApp({
                     >{{ opt.label }}</button>
                   </div>
                 </div>
-              </div>
-              <div class="tx-form-main">
+
+                <div class="form-section-title" style="font-weight:700; color:var(--brand); font-size:0.85rem; border-bottom:1px solid var(--line); padding-bottom:4px; margin-top:8px; margin-bottom:8px;">
+                  3. Rekening Bank & Kasbon
+                </div>
                 <div class="field">
-                  <label>Status</label>
-                  <select v-model="employeeForm.status">
-                    <option value="active">Aktif</option>
-                    <option value="inactive">Nonaktif</option>
+                  <label>Kategori Kasbon Karyawan</label>
+                  <select v-model="employeeForm.kasbon_category_id">
+                    <option value="">-- Tanpa Kategori Kasbon Khusus --</option>
+                    <option v-for="c in kasbonCategories" :key="'kasbon-'+c.id" :value="c.id">{{ c.name }}</option>
                   </select>
+                  <span style="font-size:0.75rem; color:var(--muted);">Terikat otomatis ke pencatatan kasbon di sistem pembukuan.</span>
+                </div>
+                <div class="grid-3">
+                  <div class="field">
+                    <label>Nama Bank</label>
+                    <input v-model="employeeForm.bank_name" placeholder="BCA / BRI / Mandiri" />
+                  </div>
+                  <div class="field">
+                    <label>Nomor Rekening</label>
+                    <input v-model="employeeForm.bank_account_number" placeholder="Nomor rekening" />
+                  </div>
+                  <div class="field">
+                    <label>Atas Nama Rekening</label>
+                    <input v-model="employeeForm.bank_account_name" placeholder="Nama di rekening" />
+                  </div>
+                </div>
+
+                <div class="form-section-title" style="font-weight:700; color:var(--brand); font-size:0.85rem; border-bottom:1px solid var(--line); padding-bottom:4px; margin-top:8px; margin-bottom:8px;">
+                  4. Alamat & Kontak Darurat
                 </div>
                 <div class="field">
-                  <label>Tanggal Masuk</label>
-                  <input type="date" v-model="employeeForm.joined_at" />
+                  <label>Alamat Lengkap</label>
+                  <textarea v-model="employeeForm.address" rows="2" placeholder="Alamat domisili/KTP..." style="width:100%; border-radius:8px; border:1px solid var(--line); padding:8px 12px; font-size:0.88rem;"></textarea>
                 </div>
-                <div class="field" style="grid-column: span 2">
-                  <label>Catatan</label>
-                  <input v-model="employeeForm.notes" placeholder="Opsional" />
+                <div class="grid-2">
+                  <div class="field">
+                    <label>Kontak Darurat (Nama & No HP)</label>
+                    <input v-model="employeeForm.emergency_contact" placeholder="misal: Ibu Maryam (081234...)" />
+                  </div>
+                  <div class="field">
+                    <label>Catatan Tambahan</label>
+                    <input v-model="employeeForm.notes" placeholder="Catatan opsional..." />
+                  </div>
                 </div>
               </div>
-              <div class="tx-form-bottom">
-                <div></div>
-                <div style="display:flex;gap:8px;justify-content:flex-end">
-                  <button v-if="employeeForm.id" class="btn btn-ghost" type="button" @click="resetEmployeeForm">Batal</button>
-                  <button class="btn btn-primary btn-tx-save" :disabled="loading" @click="submitEmployee">
-                    {{ employeeForm.id ? 'Perbarui' : 'Simpan Karyawan' }}
-                  </button>
-                </div>
+              <div class="employee-modal-footer">
+                <button class="btn btn-ghost" type="button" @click="closeEmployeeModal">Batal</button>
+                <button class="btn btn-primary" type="button" :disabled="loading" @click="submitEmployee">
+                  {{ employeeForm.id ? 'Perbarui Karyawan' : 'Simpan Karyawan' }}
+                </button>
               </div>
             </div>
           </div>
 
-          <div class="card" style="margin-top:14px">
-            <div class="panel-title">Daftar Karyawan ({{ employees.length }})</div>
-            <div class="filter-bar">
-              <div class="field">
-                <label>Cabang</label>
-                <select v-model="employeeFilter.branch_id" @change="loadEmployees">
-                  <option value="">Semua cabang</option>
+          <!-- Employee Detail Modal -->
+          <div v-if="showEmployeeDetailModal && selectedEmployeeDetail" class="employee-modal-overlay" @click.self="closeEmployeeDetailModal">
+            <div class="employee-modal-card" style="max-width:640px">
+              <div class="employee-modal-header" style="background:#F8FAFC">
+                <div class="user-avatar-cell">
+                  <div class="user-avatar-circle" style="width:48px; height:48px; font-size:1.1rem;">
+                    {{ (selectedEmployeeDetail.name || '').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase() }}
+                  </div>
+                  <div>
+                    <h3 style="margin:0; font-size:1.2rem;">{{ selectedEmployeeDetail.name }}</h3>
+                    <p style="margin:2px 0 0; font-size:0.82rem; color:var(--muted);">
+                      {{ selectedEmployeeDetail.nickname ? '(' + selectedEmployeeDetail.nickname + ')' : '' }} {{ selectedEmployeeDetail.branch?.name || 'Cabang -' }}
+                    </p>
+                  </div>
+                </div>
+                <button class="employee-modal-close" type="button" @click="closeEmployeeDetailModal" title="Tutup">✕</button>
+              </div>
+              <div class="employee-modal-body" style="gap:14px; font-size:0.88rem;">
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:12px;">
+                  <div style="background:#F8FAFC; padding:12px 14px; border-radius:10px; border:1px solid var(--line);">
+                    <div style="font-weight:700; color:var(--brand); margin-bottom:8px; font-size:0.82rem; text-transform:uppercase;">1. Informasi Utama</div>
+                    <div><strong>No Telepon / WA:</strong> {{ selectedEmployeeDetail.phone || '—' }}</div>
+                    <div><strong>NIK KTP:</strong> {{ selectedEmployeeDetail.nik || '—' }}</div>
+                    <div><strong>Jenis Kelamin:</strong> {{ selectedEmployeeDetail.gender === 'male' ? 'Laki-Laki' : (selectedEmployeeDetail.gender === 'female' ? 'Perempuan' : '—') }}</div>
+                    <div><strong>Tempat, Tgl Lahir:</strong> {{ (selectedEmployeeDetail.birth_place || '') + (selectedEmployeeDetail.birth_date ? ', ' + selectedEmployeeDetail.birth_date : '—') }}</div>
+                    <div><strong>Tanggal Masuk:</strong> {{ selectedEmployeeDetail.joined_at || '—' }}</div>
+                    <div><strong>Status:</strong> <span class="status-pill-badge" :class="selectedEmployeeDetail.status==='active' ? 'active' : 'inactive'" style="padding:2px 8px;">{{ selectedEmployeeDetail.status==='active' ? 'Aktif' : 'Nonaktif' }}</span></div>
+                  </div>
+
+                  <div style="background:#F8FAFC; padding:12px 14px; border-radius:10px; border:1px solid var(--line);">
+                    <div style="font-weight:700; color:var(--brand); margin-bottom:8px; font-size:0.82rem; text-transform:uppercase;">2. Jabatan & Kasbon</div>
+                    <div style="margin-bottom:6px;"><strong>Cabang:</strong> {{ selectedEmployeeDetail.branch?.name || '—' }}</div>
+                    <div style="margin-bottom:6px;">
+                      <strong>Jabatan / Role:</strong>
+                      <div class="role-pill-group" style="margin-top:4px;">
+                        <span v-for="pos in (Array.isArray(selectedEmployeeDetail.positions) && selectedEmployeeDetail.positions.length ? selectedEmployeeDetail.positions : [selectedEmployeeDetail.position || '—'])" :key="'det-'+pos" class="role-pill-badge" :class="pos.toLowerCase()">{{ pos }}</span>
+                      </div>
+                    </div>
+                    <div><strong>Kategori Kasbon:</strong> {{ selectedEmployeeDetail.kasbon_category?.name || '—' }}</div>
+                  </div>
+
+                  <div style="background:#F8FAFC; padding:12px 14px; border-radius:10px; border:1px solid var(--line);">
+                    <div style="font-weight:700; color:var(--brand); margin-bottom:8px; font-size:0.82rem; text-transform:uppercase;">3. Rekening Bank Payroll</div>
+                    <div><strong>Bank:</strong> {{ selectedEmployeeDetail.bank_name || '—' }}</div>
+                    <div><strong>No Rekening:</strong> {{ selectedEmployeeDetail.bank_account_number || '—' }}</div>
+                    <div><strong>Atas Nama:</strong> {{ selectedEmployeeDetail.bank_account_name || '—' }}</div>
+                  </div>
+
+                  <div style="background:#F8FAFC; padding:12px 14px; border-radius:10px; border:1px solid var(--line);">
+                    <div style="font-weight:700; color:var(--brand); margin-bottom:8px; font-size:0.82rem; text-transform:uppercase;">4. Alamat & Kontak Darurat</div>
+                    <div><strong>Alamat Lengkap:</strong> {{ selectedEmployeeDetail.address || '—' }}</div>
+                    <div><strong>Kontak Darurat:</strong> {{ selectedEmployeeDetail.emergency_contact || '—' }}</div>
+                    <div><strong>Catatan:</strong> {{ selectedEmployeeDetail.notes || '—' }}</div>
+                  </div>
+                </div>
+              </div>
+              <div class="employee-modal-footer">
+                <button class="btn btn-ghost" type="button" @click="closeEmployeeDetailModal">Tutup</button>
+                <button class="btn btn-primary" type="button" @click="closeEmployeeDetailModal(); editEmployee(selectedEmployeeDetail)">
+                  ✏️ Edit Data Ini
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:16px; width:100%; box-sizing:border-box;">
+            <div class="directory-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
+              <div class="directory-title-box">
+                <span class="panel-title" style="margin:0">Daftar Karyawan</span>
+                <span class="directory-count-badge">{{ employees.length }} Karyawan</span>
+              </div>
+            </div>
+
+            <!-- Filter Bar Full-Width inside Card -->
+            <div class="directory-filters-bar" style="display:flex; align-items:flex-end; flex-wrap:wrap; gap:10px; margin-bottom:16px; width:100%; box-sizing:border-box;">
+              <div class="field" style="min-width:140px; flex:1; max-width:180px; margin:0;">
+                <label style="display:block; font-size:0.75rem; font-weight:700; color:var(--muted); margin-bottom:4px; text-transform:uppercase;">Cabang</label>
+                <select v-model="employeeFilter.branch_id" @change="loadEmployees" style="width:100%; height:42px; padding:0 12px; border-radius:10px; box-sizing:border-box;">
+                  <option value="">Semua Cabang</option>
                   <option v-for="b in branches" :key="b.id" :value="b.id">{{ b.name }}</option>
                 </select>
               </div>
-              <div class="field">
-                <label>Status</label>
-                <select v-model="employeeFilter.status" @change="loadEmployees">
-                  <option value="">Semua</option>
+              <div class="field" style="min-width:120px; flex:1; max-width:150px; margin:0;">
+                <label style="display:block; font-size:0.75rem; font-weight:700; color:var(--muted); margin-bottom:4px; text-transform:uppercase;">Status</label>
+                <select v-model="employeeFilter.status" @change="loadEmployees" style="width:100%; height:42px; padding:0 12px; border-radius:10px; box-sizing:border-box;">
+                  <option value="">Semua Status</option>
                   <option value="active">Aktif</option>
                   <option value="inactive">Nonaktif</option>
                 </select>
               </div>
-              <div class="field field-search">
-                <label>Cari</label>
-                <input v-model="employeeFilter.q" @keyup.enter="loadEmployees" placeholder="Nama, telepon, jabatan…" />
+              <div class="field field-search" style="min-width:200px; flex:2; margin:0;">
+                <label style="display:block; font-size:0.75rem; font-weight:700; color:var(--muted); margin-bottom:4px; text-transform:uppercase;">Cari</label>
+                <div style="display:flex; align-items:center; gap:6px; width:100%;">
+                  <input v-model="employeeFilter.q" @keyup.enter="loadEmployees" placeholder="Cari nama, telepon, jabatan…" style="flex:1; width:100%; height:42px; padding:0 14px; border-radius:10px; box-sizing:border-box;" />
+                  <button class="btn btn-ghost" type="button" @click="loadEmployees" style="white-space:nowrap; height:42px; padding:0 14px; border-radius:10px; box-sizing:border-box;">Cari</button>
+                </div>
               </div>
-              <div class="field field-actions">
-                <label>&nbsp;</label>
-                <button class="btn btn-ghost" type="button" @click="loadEmployees">Cari</button>
+              <div style="margin:0; align-self:flex-end;">
+                <button class="btn btn-primary" type="button" @click="openAddEmployeeModal" style="white-space:nowrap; height:42px; padding:0 16px; border-radius:10px; box-sizing:border-box; font-size:0.85rem; font-weight:700; flex-shrink:0;">
+                  + Tambah
+                </button>
               </div>
             </div>
 
@@ -10901,36 +11142,59 @@ const app = createApp({
                 <thead>
                   <tr>
                     <th class="col-no">No</th>
-                    <th>Nama</th>
+                    <th>Nama Karyawan</th>
                     <th>Cabang</th>
-                    <th>Jabatan</th>
-                    <th>Telepon</th>
+                    <th>Jabatan / Role</th>
                     <th>Status</th>
-                    <th>Aksi</th>
+                    <th style="text-align:right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-for="(e, idx) in employees" :key="e.id">
                     <td class="col-no">{{ rowNo(idx) }}</td>
-                    <td><strong>{{ e.name }}</strong></td>
-                    <td>{{ e.branch?.name || '—' }}</td>
-                    <td>{{ formatEmployeePositions(e) }}</td>
-                    <td>{{ e.phone || '—' }}</td>
                     <td>
-                      <span class="badge" :class="e.status==='active' ? 'badge-approved' : 'badge-rejected'">
+                      <div class="user-avatar-cell">
+                        <div class="user-avatar-circle">
+                          {{ (e.name || '').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase() }}
+                        </div>
+                        <div class="user-info-text">
+                          <span class="user-name-text">{{ e.name }}</span>
+                          <span class="user-sub-text">{{ e.phone || '—' }}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <strong>{{ e.branch?.name || '—' }}</strong>
+                    </td>
+                    <td>
+                      <div class="role-pill-group">
+                        <span
+                          v-for="pos in (Array.isArray(e.positions) && e.positions.length ? e.positions : [e.position || '—'])"
+                          :key="e.id + '-' + pos"
+                          class="role-pill-badge"
+                          :class="pos.toLowerCase()"
+                        >
+                          {{ pos }}
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <span class="status-pill-badge" :class="e.status==='active' ? 'active' : 'inactive'">
+                        <span class="status-dot"></span>
                         {{ e.status==='active' ? 'Aktif' : 'Nonaktif' }}
                       </span>
                     </td>
-                    <td>
-                      <button class="btn btn-ghost btn-sm" type="button" @click="editEmployee(e)">Edit</button>
+                    <td style="text-align:right">
+                      <button class="btn btn-ghost btn-sm" type="button" @click="viewEmployeeDetail(e)" title="Lihat Detail Lengkap">Detail</button>
+                      <button class="btn btn-ghost btn-sm" type="button" @click="editEmployee(e)" title="Ubah Data">Edit</button>
                       <button class="btn btn-ghost btn-sm" type="button" @click="openEmpAccountModal(e)">
                         {{ e.user_account ? 'Akun Login' : 'Buat Login' }}
                       </button>
-                      <button class="btn btn-danger btn-sm" type="button" @click="deleteEmployee(e.id)">Hapus</button>
+                      <button class="btn btn-danger btn-sm" type="button" @click="deleteEmployee(e.id)" title="Hapus Karyawan">Hapus</button>
                     </td>
                   </tr>
                   <tr v-if="!employees.length">
-                    <td colspan="7">Belum ada data karyawan.</td>
+                    <td colspan="6" style="text-align:center; padding:24px; color:var(--muted)">Belum ada data karyawan ditemukan.</td>
                   </tr>
                 </tbody>
               </table>

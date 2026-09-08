@@ -8,7 +8,10 @@ services:
     env_file:
       - .env
     networks:
-      - apps-network
+      apps-network:
+        aliases:
+          - bms-php
+          - bms-php-dev
 
   bms-nginx-dev:
     image: nginx:alpine
