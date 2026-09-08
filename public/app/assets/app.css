@@ -1421,8 +1421,9 @@ tfoot td { background: #F8FAFC; border-top: 2px solid var(--line); font-weight: 
   background: #f8fafc;
   border-top: 1px solid var(--line);
 }
+.modal-backdrop {
   position: fixed; inset: 0; background: rgba(15,23,42,.45); display: grid; place-items: center;
-  z-index: 40; padding: 16px;
+  z-index: 9999; padding: 16px;
 }
 .modal {
   width: min(480px, 100%); background: #fff; border-radius: 18px; padding: 20px; box-shadow: var(--shadow);

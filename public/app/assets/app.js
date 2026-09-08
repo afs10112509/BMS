@@ -1395,14 +1395,14 @@ const app = createApp({
 
     // Mutasi: Admin/PIC konter. Owner hanya pantau (akses tanpa canInput).
     const canInputPulsa = computed(() => {
-      if (isOwner.value) return false;
+      if (isOwner.value) return true;
       if (isAdmin.value && !isWorkshopBranch.value) return true;
       return isPicCounter.value;
     });
     const canAccessPulsa = computed(() => isOwner.value || canInputPulsa.value);
 
     const canInputBrilink = computed(() => {
-      if (isOwner.value) return false;
+      if (isOwner.value) return true;
       if (isAdmin.value) return true;
       return isPicEmployee.value;
     });
