@@ -22,10 +22,6 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->redirectGuestsTo('/app/');
         $middleware->redirectUsersTo('/app/');
 
-        $middleware->api(prepend: [
-            \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
-        ]);
-
         $middleware->alias([
             'role' => \App\Http\Middleware\EnsureRole::class,
             'admin.branch' => \App\Http\Middleware\EnsureAdminHasBranch::class,
