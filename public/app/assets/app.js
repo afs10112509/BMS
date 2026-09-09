@@ -117,7 +117,7 @@ const app = createApp({
     });
     const ownerDashExtraOpen = ref(false);
 
-    const loginForm = reactive({ email: '', password: 'password', remember: false });
+    const loginForm = reactive({ email: '', password: '', remember: false });
     const demoAccounts = ref([]);
     const demoPasswordHint = ref('password');
     const loginError = ref('');

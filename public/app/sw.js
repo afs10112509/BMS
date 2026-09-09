@@ -1,5 +1,5 @@
 /* BMS PWA service worker — cache ringan agar bisa di-install ke layar utama */
-const CACHE = 'bms-shell-v20260909-v45-no-demo-prod';
+const CACHE = 'bms-shell-v20260909-v46-empty-password-fix';
 const PRECACHE = [
   '/app/',
   '/app/index.html',
