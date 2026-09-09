@@ -1,5 +1,5 @@
 /* BMS PWA service worker — cache ringan agar bisa di-install ke layar utama */
-const CACHE = 'bms-shell-v20260909-v49-network-first-autofill-fix';
+const CACHE = 'bms-shell-v20260909-v50-nocache-api-fix';
 const PRECACHE = [
   '/app/',
   '/app/index.html',

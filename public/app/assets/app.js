@@ -1695,11 +1695,12 @@ const app = createApp({
       const headers = {
         Accept: 'application/json',
         'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache',
         ...(options.headers || {}),
       };
       if (token.value) headers.Authorization = `Bearer ${token.value}`;
 
-      const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+      const res = await fetch(`${API_BASE}${path}`, { cache: 'no-store', ...options, headers });
       let data = null;
       try {
         data = await res.json();
