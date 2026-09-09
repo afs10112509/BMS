@@ -14,11 +14,11 @@ class AuthController extends Controller
 {
     public function login(Request $request): JsonResponse
     {
-        return response()->json([
-            'debug_input' => $request->all(),
-            'content' => $request->getContent(),
-            'is_json' => $request->isJson(),
+        $request->merge([
+            'email' => trim((string) $request->input('email')),
+            'password' => trim((string) $request->input('password')),
         ]);
+
         $credentials = $request->validate([
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
@@ -27,10 +27,8 @@ class AuthController extends Controller
         $user = User::query()->where('email', $credentials['email'])->first();
 
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {
-            $userPass = $user ? $user->password : 'NO_USER';
-            $checkResult = $user ? (Hash::check($credentials['password'], $user->password) ? 'MATCH' : 'FAIL') : 'NO_USER';
             throw ValidationException::withMessages([
-                'email' => ["Debug: email={$credentials['email']} pass={$credentials['password']} len=" . strlen($credentials['password']) . " check={$checkResult} hash={$userPass}"],
+                'email' => ['Email atau kata sandi tidak sesuai.'],
             ]);
         }
 
