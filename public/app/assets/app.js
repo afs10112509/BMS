@@ -1762,8 +1762,8 @@ const app = createApp({
         const data = await api('/auth/login', {
           method: 'POST',
           body: JSON.stringify({
-            email: loginForm.email,
-            password: loginForm.password,
+            email: (loginForm.email || '').trim(),
+            password: (loginForm.password || '').trim(),
           }),
         });
         persistAuth(data.token, data.user);

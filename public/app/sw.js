@@ -1,5 +1,5 @@
 /* BMS PWA service worker — cache ringan agar bisa di-install ke layar utama */
-const CACHE = 'bms-shell-v20260909-v47-fix-bootstrap-logout';
+const CACHE = 'bms-shell-v20260909-v48-login-trim-and-throttle';
 const PRECACHE = [
   '/app/',
   '/app/index.html',
