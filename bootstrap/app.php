@@ -37,7 +37,6 @@ return Application::configure(basePath: dirname(__DIR__))
         $wantsJson = fn (Request $request): bool => $request->is('api/*') || $request->expectsJson();
 
         $exceptions->render(function (AuthenticationException $e, Request $request) use ($wantsJson) {
-            \Illuminate\Support\Facades\Log::info('AUTH_DEBUG_FAIL: ' . $request->path() . ' | Bearer: ' . ($request->bearerToken() ? 'YES' : 'NO') . ' | Guards: ' . implode(',', $e->guards()));
             if (! $wantsJson($request)) {
                 return null;
             }
