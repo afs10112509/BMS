@@ -7446,8 +7446,9 @@ const app = createApp({
         page.value = 'dashboard';
         if (isOwner.value) await loadOwnerDashboard();
         else await loadBranchDashboard();
-      } catch (_) {
-        logout(false);
+      } catch (err) {
+        console.error('bootstrapApp error:', err);
+        if (!token.value) logout(false);
       } finally {
         bootLoading.value = false;
       }
