@@ -105,6 +105,7 @@ const app = createApp({
     const showPassword = ref(false);
     const navGroups = reactive({
       utama: true,
+      master: true,
       operasional: true,
       pendukung: false,
       transfer: true,
@@ -1643,6 +1644,7 @@ const app = createApp({
 
     function syncNavGroups(nextPage = page.value) {
       if (utamaPages.includes(nextPage)) navGroups.utama = true;
+      if (['products', 'customers', 'employees', 'employee-points', 'product-serials', 'branch-categories'].includes(nextPage)) navGroups.master = true;
       if (operasionalPages.includes(nextPage)) navGroups.operasional = true;
       if (pendukungPages.includes(nextPage)) navGroups.pendukung = true;
       if (transferPages.includes(nextPage)) navGroups.transfer = true;
@@ -1917,6 +1919,9 @@ const app = createApp({
 
     async function loadDemoAccounts() {
       demoAccounts.value = [];
+      if (window.location.hostname === 'bms.adbr.my.id' || window.location.hostname.includes('adbr.my.id')) {
+        return;
+      }
       try {
         const data = await api('/auth/demo-accounts');
         demoAccounts.value = data.data || [];
@@ -2424,6 +2429,8 @@ const app = createApp({
     async function onOwnerDashFilterChange() {
       if (page.value === 'dashboard' && isOwner.value) {
         await loadOwnerDashboard();
+      } else if (page.value === 'products') {
+        await loadProducts();
       }
     }
     const onOwnerDashBranchChange = onOwnerDashFilterChange;
@@ -7067,6 +7074,14 @@ const app = createApp({
       if (page.value === 'payroll') await loadPayrollBoard();
       if (page.value === 'profit-shares') await loadProfitShareBoard();
       if (page.value === 'workshop-wages') await loadWorkshopWagePage();
+      if (page.value === 'products') await loadProducts();
+      if (page.value === 'suppliers') await loadSuppliers();
+      if (page.value === 'service-types') await loadServiceTypes();
+      if (page.value === 'bank-accounts') await loadBankAccounts();
+      if (page.value === 'sales') await loadPosData();
+      if (page.value === 'product-serials') await loadProductSerials();
+      if (page.value === 'customers') await loadCustomers();
+      if (page.value === 'employee-points') await loadEmployeePointsSummary();
       if (page.value === 'workshop-upah-report' && canAccessWorkshopUpahReport.value) {
         await loadWorkshopUpahReport();
       }
@@ -7483,6 +7498,213 @@ const app = createApp({
       }
     );
 
+    const showProductModal = ref(false);
+    const productModalTab = ref('harga');
+    const masterProducts = ref([]);
+    const brandsList = ref([]);
+    const productSearch = ref('');
+    const productForm = reactive({
+      name: '',
+      type: 'accessory',
+      base_unit: 'pcs',
+      barcode: '',
+      brand: '',
+      model: '',
+      cost_price: 0,
+      selling_price: 0,
+      stock_quantity: 0,
+      stock_store: 0,
+      stock_warehouse: 0,
+      min_stock: 2,
+      max_stock: 100,
+      requires_serial: false,
+      allow_open_price: false,
+      allow_open_discount: false,
+      show_stock_reminder: true,
+      image_url: '',
+      supplier_id: '',
+      branch_id: '',
+    });
+
+    async function loadBrands() {
+      try {
+        const res = await apiFetch('/brands');
+        brandsList.value = res.data || res || [];
+      } catch (e) {}
+    }
+
+    function openAddProductModal() {
+      Object.assign(productForm, {
+        name: '',
+        type: 'accessory',
+        base_unit: 'pcs',
+        barcode: '',
+        brand: '',
+        model: '',
+        cost_price: 0,
+        selling_price: 0,
+        stock_quantity: 0,
+        stock_store: 0,
+        stock_warehouse: 0,
+        min_stock: 2,
+        max_stock: 100,
+        requires_serial: false,
+        allow_open_price: false,
+        allow_open_discount: false,
+        show_stock_reminder: true,
+        image_url: '',
+        supplier_id: '',
+        branch_id: '',
+      });
+      loadBrands();
+      loadSuppliers();
+      showProductModal.value = true;
+    }
+
+    const suppliersList = ref([]);
+    const serviceTypesList = ref([]);
+    const bankAccountsList = ref([]);
+
+    async function loadSuppliers() {
+      try {
+        const res = await apiFetch('/suppliers');
+        suppliersList.value = res.data || res || [];
+      } catch (e) {}
+    }
+
+    async function loadServiceTypes() {
+      try {
+        const res = await apiFetch('/service-types');
+        serviceTypesList.value = res.data || res || [];
+      } catch (e) {}
+    }
+
+    async function loadBankAccounts() {
+      try {
+        const res = await apiFetch('/bank-accounts');
+        bankAccountsList.value = res.data || res || [];
+      } catch (e) {}
+    }
+
+    async function loadProducts() {
+      try {
+        const params = new URLSearchParams();
+        if (productSearch.value) params.append('search', productSearch.value);
+        if (ownerDashBranchId.value && ownerDashBranchId.value !== 'all' && ownerDashBranchId.value !== '') {
+          params.append('branch_id', ownerDashBranchId.value);
+        }
+        params.append('per_page', '100');
+
+        const url = '/products?' + params.toString();
+        const res = await apiFetch(url);
+        let list = [];
+        if (Array.isArray(res)) {
+          list = res;
+        } else if (res && Array.isArray(res.data)) {
+          list = res.data;
+        } else if (res && res.data && Array.isArray(res.data.data)) {
+          list = res.data.data;
+        }
+        masterProducts.value = list;
+      } catch (e) {
+        console.error('loadProducts error:', e);
+      }
+    }
+
+    async function submitAddProduct() {
+      if (!productForm.name) return;
+      loading.value = true;
+      try {
+        const payload = { ...productForm };
+        const res = await apiFetch('/products', { method: 'POST', body: JSON.stringify(payload) });
+        toast(res.message || 'Barang baru berhasil ditambahkan', 'success');
+        showProductModal.value = false;
+        await loadProducts();
+      } catch (e) {
+        toast(e.message || 'Gagal menambah barang', 'error');
+      } finally {
+        loading.value = false;
+      }
+    }
+
+    const posForm = reactive({
+      sale_date: today(),
+      payment_method: 'cash',
+      customer_name: '',
+      customer_phone: '',
+      notes: '',
+    });
+    const posCart = ref([
+      { product_id: '', quantity: 1, unit_price: 0, discount: 0 }
+    ]);
+    const posProducts = ref([]);
+    const posSerials = ref([]);
+    const posCustomers = ref([]);
+    const posEmployeePoints = ref([]);
+
+    async function loadPosData() {
+      try {
+        const res = await apiFetch('/products');
+        posProducts.value = res.data || res || [];
+      } catch (e) {}
+    }
+
+    function onPosProductChange(item) {
+      const p = posProducts.value.find(x => x.id === item.product_id);
+      if (p) {
+        item.unit_price = Number(p.selling_price || p.cost_price || 0);
+      }
+    }
+
+    async function submitPosSale() {
+      if (!posCart.value.length) return;
+      loading.value = true;
+      try {
+        const payload = {
+          sale_date: posForm.sale_date,
+          payment_method: posForm.payment_method,
+          customer_name: posForm.customer_name || null,
+          customer_phone: posForm.customer_phone || null,
+          notes: posForm.notes || null,
+          items: posCart.value.map(i => ({
+            product_id: i.product_id,
+            quantity: i.quantity,
+            unit_price: i.unit_price,
+            discount: i.discount || 0
+          }))
+        };
+        const res = await apiFetch('/sales', { method: 'POST', body: JSON.stringify(payload) });
+        toast(res.message || 'Penjualan berhasil dicatat dengan Stok FIFO & Jurnal SAK EMKM', 'success');
+        posCart.value = [{ product_id: '', quantity: 1, unit_price: 0, discount: 0 }];
+        await loadPosData();
+      } catch (e) {
+        toast(e.message || 'Gagal menyimpan penjualan', 'error');
+      } finally {
+        loading.value = false;
+      }
+    }
+
+    async function loadProductSerials() {
+      try {
+        const res = await apiFetch('/product-serials');
+        posSerials.value = res.data || res || [];
+      } catch (e) {}
+    }
+
+    async function loadCustomers() {
+      try {
+        const res = await apiFetch('/customers');
+        posCustomers.value = res.data || res || [];
+      } catch (e) {}
+    }
+
+    async function loadEmployeePointsSummary() {
+      try {
+        const res = await apiFetch('/employee-points/summary');
+        posEmployeePoints.value = res.data || res || [];
+      } catch (e) {}
+    }
+
     onMounted(async () => {
       bindPwaInstallEvents();
       if (token.value) await bootstrapApp();
@@ -7492,6 +7714,34 @@ const app = createApp({
     onBeforeUnmount(() => destroyCharts());
 
     return {
+      showProductModal,
+      productModalTab,
+      masterProducts,
+      brandsList,
+      loadBrands,
+      productSearch,
+      productForm,
+      openAddProductModal,
+      loadProducts,
+      submitAddProduct,
+      suppliersList,
+      serviceTypesList,
+      bankAccountsList,
+      loadSuppliers,
+      loadServiceTypes,
+      loadBankAccounts,
+      posForm,
+      posCart,
+      posProducts,
+      posSerials,
+      posCustomers,
+      posEmployeePoints,
+      loadPosData,
+      onPosProductChange,
+      submitPosSale,
+      loadProductSerials,
+      loadCustomers,
+      loadEmployeePointsSummary,
       showEmployeeModal,
       openAddEmployeeModal,
       closeEmployeeModal,
@@ -8548,8 +8798,16 @@ const app = createApp({
     <div v-else class="app-shell">
       <div class="sidebar-overlay" :class="{open: sidebarOpen}" @click="closeSidebar"></div>
       <aside class="sidebar sidebar-drawer" :class="{open: sidebarOpen}">
-        <div class="logo brand">BMS</div>
-        <div class="logo-sub">Belawa Management System</div>
+        <div class="sidebar-brand-box">
+          <div class="sidebar-logo-icon">BMS</div>
+          <div class="sidebar-brand-info">
+            <div class="sidebar-brand-title">Belawa SIM</div>
+            <div class="sidebar-brand-meta">
+              <span class="sidebar-role-pill">{{ isOwner ? 'OWNER' : (isAdmin ? 'ADMIN' : 'STAF') }}</span>
+              <span class="sidebar-branch-name">{{ user?.branch?.name || 'Multi Cabang' }}</span>
+            </div>
+          </div>
+        </div>
 
         <!-- OWNER: Utama + modul per grup -->
         <template v-if="isOwner">
@@ -8579,6 +8837,59 @@ const app = createApp({
           </div>
 
           <div class="nav-group">
+            <button type="button" class="nav-group-toggle" :class="{open: navGroups.master}" @click="toggleNavGroup('master')">
+              <span>Master Data</span>
+              <span class="chev"></span>
+            </button>
+            <div v-show="navGroups.master" class="nav-group-items">
+              <button class="nav-btn" :class="{active: page==='products'}" @click="go('products')">
+                <svg class="nav-ico" viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                <span>Barang</span>
+              </button>
+              <button class="nav-btn" :class="{active: page==='customers'}" @click="go('customers')">
+                <svg class="nav-ico" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                <span>Data Pelanggan</span>
+              </button>
+              <button class="nav-btn" :class="{active: page==='employees'}" @click="go('employees')">
+                <svg class="nav-ico" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 19a6 6 0 0112 0"/><path d="M14 19a4.5 4.5 0 017 0"/></svg>
+                <span>Data Sales / Karyawan</span>
+              </button>
+              <button class="nav-btn" :class="{active: page==='customers'}" @click="go('customers')">
+                <svg class="nav-ico" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                <span>Poin Pelanggan</span>
+              </button>
+              <button class="nav-btn" :class="{active: page==='employee-points'}" @click="go('employee-points')">
+                <svg class="nav-ico" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                <span>Poin Sales / Komisi</span>
+              </button>
+              <button class="nav-btn" :class="{active: page==='product-serials'}" @click="go('product-serials')">
+                <svg class="nav-ico" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>
+                <span>IMEI / Serial Number</span>
+              </button>
+              <button class="nav-btn" :class="{active: page==='suppliers'}" @click="go('suppliers')">
+                <svg class="nav-ico" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+                <span>Data Supplier / Distributor</span>
+              </button>
+              <button class="nav-btn" :class="{active: page==='service-types'}" @click="go('service-types')">
+                <svg class="nav-ico" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+                <span>Tarif &amp; Katalog Servis</span>
+              </button>
+              <button class="nav-btn" :class="{active: page==='bank-accounts'}" @click="go('bank-accounts')">
+                <svg class="nav-ico" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+                <span>Rekening Bank &amp; EDC / QRIS</span>
+              </button>
+              <button class="nav-btn" :class="{active: page==='branch-categories'}" @click="go('branch-categories')">
+                <svg class="nav-ico" viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h14"/><path d="M18 10v8"/><path d="M15 14h6"/></svg>
+                <span>Kategori &amp; Akun</span>
+              </button>
+              <button class="nav-btn" :class="{active: page==='kelola'}" @click="go('kelola')">
+                <svg class="nav-ico" viewBox="0 0 24 24"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3"/></svg>
+                <span>Gudang &amp; Cabang</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="nav-group">
             <button type="button" class="nav-group-toggle" :class="{open: navGroups.transfer}" @click="toggleNavGroup('transfer')">
               <span>Transfer</span>
               <span class="chev"></span>
@@ -8601,6 +8912,22 @@ const app = createApp({
               <span class="chev"></span>
             </button>
             <div v-show="navGroups.konter" class="nav-group-items">
+              <button class="nav-btn" :class="{active: page==='products'}" @click="go('products')">
+                <svg class="nav-ico" viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                <span>Stok &amp; Master Produk</span>
+              </button>
+              <button class="nav-btn" :class="{active: page==='sales'}" @click="go('sales')">
+                <svg class="nav-ico" viewBox="0 0 24 24"><path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                <span>POS Kasir</span>
+              </button>
+              <button class="nav-btn" :class="{active: page==='product-serials'}" @click="go('product-serials')">
+                <svg class="nav-ico" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>
+                <span>IMEI / Serial Number</span>
+              </button>
+              <button class="nav-btn" :class="{active: page==='customers'}" @click="go('customers')">
+                <svg class="nav-ico" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                <span>Pelanggan &amp; Loyalty</span>
+              </button>
               <button class="nav-btn" :class="{active: page==='services'}" @click="go('services')">
                 <svg class="nav-ico" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
                 <span>Catatan Servis</span>
@@ -8646,6 +8973,10 @@ const app = createApp({
               <button class="nav-btn" :class="{active: page==='employees'}" @click="go('employees')">
                 <svg class="nav-ico" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 19a6 6 0 0112 0"/><path d="M14 19a4.5 4.5 0 017 0"/></svg>
                 <span>Data Karyawan</span>
+              </button>
+              <button class="nav-btn" :class="{active: page==='employee-points'}" @click="go('employee-points')">
+                <svg class="nav-ico" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                <span>Poin &amp; Komisi</span>
               </button>
             </div>
           </div>
@@ -14627,6 +14958,524 @@ const app = createApp({
                   </tr>
                   <tr v-if="!dbBackupList.length">
                     <td colspan="5" class="db-empty">Belum ada backup. Buat cadangan baru atau unggah dump di atas.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section v-if="page==='products'" class="ipos-page-wrap">
+          <!-- Page Header -->
+          <div class="ipos-page-header">
+            <div>
+              <h2 class="ipos-page-title">Barang</h2>
+              <p class="ipos-page-sub">Kelola master data barang, harga pokok/jual &amp; stok per cabang</p>
+            </div>
+          </div>
+
+          <!-- iPOS Top Filter Bar (Strict 1 Row) -->
+          <div class="card p-3 mb-3 ipos-toolbar">
+            <div class="ipos-toolbar-row">
+              <input type="text" v-model="productSearch" placeholder="Cari Kode, Barcode, Nama Barang, Merek..." class="form-input ipos-search-input" @keyup.enter="loadProducts" />
+              
+              <select v-model="ownerDashBranchId" class="form-select ipos-branch-select" @change="loadProducts">
+                <option value="">Semua Cabang</option>
+                <option v-for="b in branches" :key="b.id" :value="b.id">{{ b.name }} ({{ b.code }})</option>
+              </select>
+
+              <button type="button" class="btn btn-ghost ipos-search-btn" @click="loadProducts">Segarkan / Cari</button>
+
+              <div class="ipos-count-badge">
+                <span>Total Data Ditemukan :</span>
+                <strong>{{ masterProducts.length }} Item</strong>
+              </div>
+            </div>
+          </div>
+
+          <!-- iPOS Main Data Table -->
+          <div class="card p-0 ipos-table-card">
+            <div class="table-wrap">
+              <table class="table ipos-grid-table">
+                <thead>
+                  <tr>
+                    <th style="width:40px">Gbr</th>
+                    <th>Kode Item</th>
+                    <th>Nama Item</th>
+                    <th>Stok</th>
+                    <th>Jenis</th>
+                    <th>Merek</th>
+                    <th>Harga Pokok</th>
+                    <th>Harga Jual</th>
+                    <th>Status Jual</th>
+                    <th style="width:80px">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="p in masterProducts" :key="p.id" class="ipos-tr">
+                    <td>
+                      <img v-if="p.image_url" :src="p.image_url" class="w-8 h-8 object-contain rounded border" />
+                      <div v-else class="w-8 h-8 rounded border bg-gray-100 flex items-center justify-center text-[10px] text-gray-400 font-bold">BOX</div>
+                    </td>
+                    <td><code class="ipos-code">{{ p.sku }}</code> <br v-if="p.barcode"><small v-if="p.barcode" class="text-muted">{{ p.barcode }}</small></td>
+                    <td class="font-bold text-gray-800">{{ p.name }} <br><small class="text-muted font-normal" v-if="p.model">{{ p.model }}</small></td>
+                    <td>
+                      <span class="badge" :class="p.stock_quantity <= (p.min_stock || 2) ? 'badge-pending' : 'badge-approved'">
+                        {{ p.stock_quantity }} {{ p.base_unit || 'pcs' }}
+                      </span>
+                    </td>
+                    <td><span class="badge badge-info">{{ p.type ? p.type.toUpperCase() : 'UMUM' }}</span></td>
+                    <td>{{ p.brand || '-' }}</td>
+                    <td class="font-semibold">{{ formatRp(p.cost_price) }}</td>
+                    <td class="font-bold text-teal-700">{{ formatRp(p.selling_price) }}</td>
+                    <td>
+                      <span v-if="p.requires_serial" class="badge badge-approved">Wajib Serial (IMEI)</span>
+                      <span v-else-if="p.allow_open_price" class="badge badge-info">Open Price</span>
+                      <span v-else class="badge badge-secondary">Bisa Dijual</span>
+                    </td>
+                    <td>
+                      <button type="button" class="btn btn-ghost btn-xs" title="Edit Barang" @click="openAddProductModal">Edit</button>
+                    </td>
+                  </tr>
+                  <tr v-if="!masterProducts.length">
+                    <td colspan="10" class="text-center p-6 text-muted">Belum ada data barang. Klik "+ Item Baru" di bawah untuk menambah data.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- iPOS Bottom Action Footer Bar -->
+            <div class="ipos-bottom-bar flex flex-wrap items-center justify-between p-3 bg-slate-100 border-t gap-3">
+              <div class="ipos-page-info text-xs font-semibold text-gray-600">
+                Hal 1 / 1 (Total {{ masterProducts.length }} Item)
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <button type="button" class="btn btn-primary btn-sm" @click="openAddProductModal">+ Item Baru [F2]</button>
+                <button type="button" class="btn btn-ghost btn-sm" @click="loadProducts">Edit Item</button>
+                <button type="button" class="btn btn-ghost btn-sm" @click="loadProducts">Duplikasi</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Modal Tambah Barang (iPOS 5 Structured Layout) -->
+          <div v-if="showProductModal" class="modal-backdrop" @click.self="showProductModal=false">
+            <div class="modal item-modal-ipos" style="max-width:860px; width:92vw;">
+              <div class="ipos-header">
+                <div class="ipos-title">
+                  <svg class="ipos-title-icon" viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                  <span>Input Data Barang</span>
+                </div>
+                <button type="button" class="ipos-close" @click="showProductModal=false">&times;</button>
+              </div>
+
+              <div class="ipos-body">
+                <!-- Left Panel: Identitas Barang -->
+                <div class="ipos-panel-left">
+                  <div class="ipos-panel-head">Identitas Barang</div>
+                  
+                  <div class="field mb-2">
+                    <label>Kode / Barcode (Opsional)</label>
+                    <input type="text" v-model="productForm.barcode" placeholder="Auto / Scan Barcode" class="form-input" />
+                  </div>
+
+                  <div class="field mb-2">
+                    <label>Nama Barang *</label>
+                    <input type="text" v-model="productForm.name" placeholder="Mis. Samsung Galaxy A54 8/256GB" class="form-input" />
+                  </div>
+
+                  <div class="grid grid-2 gap-2 mb-2">
+                    <div class="field">
+                      <label>Kategori *</label>
+                      <select v-model="productForm.type" class="form-select">
+                        <option value="phone">HP / Smartphone</option>
+                        <option value="accessory">Aksesoris</option>
+                        <option value="spare_part">Sparepart</option>
+                        <option value="other">Lainnya</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label>Satuan *</label>
+                      <select v-model="productForm.base_unit" class="form-select">
+                        <option value="pcs">pcs (Pcs / Biji)</option>
+                        <option value="unit">unit (Unit)</option>
+                        <option value="dus">dus (Dus)</option>
+                        <option value="pack">pack (Pack)</option>
+                        <option value="box">box (Box)</option>
+                        <option value="set">set (Set)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="grid grid-2 gap-2 mb-2">
+                    <div class="field">
+                      <label>Merk / Brand</label>
+                      <input type="text" v-model="productForm.brand" list="brand-suggestions" placeholder="Pilih / ketik Merk" class="form-input" />
+                      <datalist id="brand-suggestions">
+                        <option v-for="b in brandsList" :key="b.id" :value="b.name"></option>
+                      </datalist>
+                    </div>
+                    <div class="field">
+                      <label>Model / Seri</label>
+                      <input type="text" v-model="productForm.model" placeholder="SM-A546B" class="form-input" />
+                    </div>
+                  </div>
+
+                  <div class="field">
+                    <label>Supplier / Pemasok</label>
+                    <select v-model="productForm.supplier_id" class="form-select">
+                      <option value="">-- Tanpa Supplier / Pilih --</option>
+                      <option v-for="s in suppliersList" :key="s.id" :value="s.id">{{ s.name }} ({{ s.code }})</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Right Panel: Tabbed Details (Harga, Gambar, Stok, Pengaturan) -->
+                <div class="ipos-panel-right">
+                  <div class="ipos-tabs">
+                    <button type="button" class="ipos-tab-btn" :class="{active: productModalTab==='harga'}" @click="productModalTab='harga'">Harga</button>
+                    <button type="button" class="ipos-tab-btn" :class="{active: productModalTab==='gambar'}" @click="productModalTab='gambar'">Gambar</button>
+                    <button type="button" class="ipos-tab-btn" :class="{active: productModalTab==='stok'}" @click="productModalTab='stok'">Stok</button>
+                    <button type="button" class="ipos-tab-btn" :class="{active: productModalTab==='pengaturan'}" @click="productModalTab='pengaturan'">Pengaturan</button>
+                  </div>
+
+                  <div class="ipos-tab-content">
+                    <!-- Tab Harga -->
+                    <div v-if="productModalTab==='harga'" class="ipos-tab-pane">
+                      <div class="field mb-3">
+                        <label>Harga Beli (HPP Modal) *</label>
+                        <div class="input-rp-wrap">
+                          <span class="rp-prefix">Rp</span>
+                          <input type="number" min="0" v-model.number="productForm.cost_price" class="form-input rp-input" placeholder="0" />
+                        </div>
+                      </div>
+                      <div class="field mb-3">
+                        <label>Harga Jual (Pelanggan Umum) *</label>
+                        <div class="input-rp-wrap">
+                          <span class="rp-prefix">Rp</span>
+                          <input type="number" min="0" v-model.number="productForm.selling_price" class="form-input rp-input" placeholder="0" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Tab Gambar -->
+                    <div v-if="productModalTab==='gambar'" class="ipos-tab-pane flex flex-col items-center justify-center p-3 text-center">
+                      <div class="field w-full mb-2">
+                        <label>URL Gambar Barang (Opsional)</label>
+                        <input type="text" v-model="productForm.image_url" placeholder="https://..." class="form-input text-xs" />
+                      </div>
+                      <div class="ipos-image-dropzone w-full flex-1 flex flex-col items-center justify-center p-4 border-2 border-dashed rounded-lg bg-gray-50 cursor-pointer">
+                        <img v-if="productForm.image_url" :src="productForm.image_url" class="max-h-24 object-contain mb-2" />
+                        <svg v-else class="w-10 h-10 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                        <span class="text-xs text-gray-500 font-semibold">klik disini untuk load / upload gambar</span>
+                      </div>
+                    </div>
+
+                    <!-- Tab Stok -->
+                    <div v-if="productModalTab==='stok'" class="ipos-tab-pane">
+                      <div class="grid grid-2 gap-2 mb-2">
+                        <div class="field">
+                          <label>Stok di toko</label>
+                          <input type="number" min="0" v-model.number="productForm.stock_quantity" class="form-input" />
+                        </div>
+                        <div class="field">
+                          <label>Stok di gudang</label>
+                          <input type="number" min="0" v-model.number="productForm.stock_warehouse" class="form-input" />
+                        </div>
+                      </div>
+                      <div class="grid grid-2 gap-2 mb-2">
+                        <div class="field">
+                          <label>Stok minimal</label>
+                          <input type="number" min="0" v-model.number="productForm.min_stock" class="form-input" />
+                        </div>
+                        <div class="field">
+                          <label>Stok maksimal</label>
+                          <input type="number" min="0" v-model.number="productForm.max_stock" class="form-input" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Tab Pengaturan -->
+                    <div v-if="productModalTab==='pengaturan'" class="ipos-tab-pane flex flex-col gap-2">
+                      <label class="flex items-center gap-2 cursor-pointer p-2 border rounded bg-white">
+                        <input type="checkbox" v-model="productForm.requires_serial" />
+                        <span class="text-xs font-semibold">Barang Serial (SN / IMEI)</span>
+                      </label>
+                      <label class="flex items-center gap-2 cursor-pointer p-2 border rounded bg-white">
+                        <input type="checkbox" v-model="productForm.allow_open_price" />
+                        <span class="text-xs font-semibold">Open Price (Harga Jual Fleksibel saat Kasir)</span>
+                      </label>
+                      <label class="flex items-center gap-2 cursor-pointer p-2 border rounded bg-white">
+                        <input type="checkbox" v-model="productForm.allow_open_discount" />
+                        <span class="text-xs font-semibold">Open Price (Diskon Fleksibel saat Kasir)</span>
+                      </label>
+                      <label class="flex items-center gap-2 cursor-pointer p-2 border rounded bg-white">
+                        <input type="checkbox" v-model="productForm.show_stock_reminder" />
+                        <span class="text-xs font-semibold">Tampil di reminder stok</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Footer Actions -->
+              <div class="ipos-footer">
+                <button type="button" class="btn btn-ghost" @click="showProductModal=false">Batal [ESC]</button>
+                <button type="button" class="btn btn-primary" :disabled="loading || !productForm.name" @click="submitAddProduct">Simpan Barang [F8]</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section Suppliers -->
+        <section v-if="page==='suppliers'">
+          <div class="page-head flex justify-between items-center mb-4">
+            <div>
+              <h2 class="brand">Data Supplier / Distributor</h2>
+              <p>Kelola daftar pemasok barang, tempo &amp; kontak distributor</p>
+            </div>
+          </div>
+          <div class="card p-4">
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Kode</th><th>Nama Supplier</th><th>Kontak Person</th><th>No. Telp</th><th>Alamat</th></tr></thead>
+                <tbody>
+                  <tr v-for="s in suppliersList" :key="s.id">
+                    <td class="font-bold">{{ s.code }}</td>
+                    <td>{{ s.name }}</td>
+                    <td>{{ s.contact_person || '-' }}</td>
+                    <td>{{ s.phone || '-' }}</td>
+                    <td>{{ s.address || '-' }}</td>
+                  </tr>
+                  <tr v-if="!suppliersList.length"><td colspan="5" class="text-center p-4">Belum ada data supplier.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section Service Types (Tarif Servis) -->
+        <section v-if="page==='service-types'">
+          <div class="page-head flex justify-between items-center mb-4">
+            <div>
+              <h2 class="brand">Tarif &amp; Katalog Jenis Servis</h2>
+              <p>Daftar estimasi biaya &amp; HPP perbaikan HP (Hardware &amp; Software)</p>
+            </div>
+          </div>
+          <div class="card p-4">
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Nama Servis / Perbaikan</th><th>Kategori</th><th>Estimasi Biaya (Harga Jual)</th><th>Estimasi Modal (HPP)</th></tr></thead>
+                <tbody>
+                  <tr v-for="st in serviceTypesList" :key="st.id">
+                    <td class="font-bold">{{ st.name }}</td>
+                    <td><span class="badge" :class="st.category==='hardware' ? 'badge-income':'badge-pending'">{{ st.category ? st.category.toUpperCase() : '' }}</span></td>
+                    <td class="font-bold text-teal-600">{{ formatRp(st.default_estimated_cost) }}</td>
+                    <td>{{ formatRp(st.default_cost_price) }}</td>
+                  </tr>
+                  <tr v-if="!serviceTypesList.length"><td colspan="4" class="text-center p-4">Belum ada katalog servis.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section Bank Accounts (Rekening & EDC/QRIS) -->
+        <section v-if="page==='bank-accounts'">
+          <div class="page-head flex justify-between items-center mb-4">
+            <div>
+              <h2 class="brand">Rekening Bank &amp; EDC / QRIS</h2>
+              <p>Kelola akun bank toko untuk transaksi transfer &amp; agen BRILink</p>
+            </div>
+          </div>
+          <div class="card p-4">
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Bank / Metode</th><th>No. Rekening / ID</th><th>Nama Pemilik</th><th>Saldo Saat Ini</th></tr></thead>
+                <tbody>
+                  <tr v-for="ba in bankAccountsList" :key="ba.id">
+                    <td class="font-bold">{{ ba.bank_name }}</td>
+                    <td class="font-bold">{{ ba.account_number }}</td>
+                    <td>{{ ba.account_name }}</td>
+                    <td class="font-bold text-teal-600">{{ formatRp(ba.current_balance) }}</td>
+                  </tr>
+                  <tr v-if="!bankAccountsList.length"><td colspan="4" class="text-center p-4">Belum ada rekening bank.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section v-if="page==='sales'">
+          <div class="page-head">
+            <div>
+              <h2 class="brand">POS Kasir (Penjualan)</h2>
+              <p>Input penjualan produk, IMEI &amp; FIFO otomatis</p>
+            </div>
+          </div>
+          <div class="card p-4">
+            <div class="grid grid-2 gap-4">
+              <div class="field">
+                <label>Tanggal Transaksi</label>
+                <input type="date" v-model="posForm.sale_date" class="form-input" />
+              </div>
+              <div class="field">
+                <label>Metode Pembayaran</label>
+                <select v-model="posForm.payment_method" class="form-select">
+                  <option value="cash">Tunai (Cash)</option>
+                  <option value="transfer">Transfer Bank</option>
+                  <option value="qris">QRIS</option>
+                </select>
+              </div>
+            </div>
+            <div class="grid grid-2 gap-4 mt-3">
+              <div class="field">
+                <label>Nama Pelanggan (Opsional)</label>
+                <input type="text" v-model="posForm.customer_name" placeholder="Pelanggan Umum" class="form-input" />
+              </div>
+              <div class="field">
+                <label>No. HP Pelanggan</label>
+                <input type="text" v-model="posForm.customer_phone" placeholder="08..." class="form-input" />
+              </div>
+            </div>
+
+            <h3 class="mt-4 font-bold text-teal">Item Penjualan</h3>
+            <div class="table-wrap mt-2">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Produk</th>
+                    <th>Qty</th>
+                    <th>Harga Unit</th>
+                    <th>Diskon</th>
+                    <th>Subtotal</th>
+                    <th>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(item, idx) in posCart" :key="idx">
+                    <td>
+                      <select v-model="item.product_id" class="form-select" @change="onPosProductChange(item)">
+                        <option value="">Pilih Produk</option>
+                        <option v-for="p in posProducts" :key="p.id" :value="p.id">{{ p.sku }} - {{ p.name }} (Stok: {{ p.stock_quantity }})</option>
+                      </select>
+                    </td>
+                    <td><input type="number" min="1" v-model.number="item.quantity" class="form-input w-20" /></td>
+                    <td><input type="number" min="0" v-model.number="item.unit_price" class="form-input" /></td>
+                    <td><input type="number" min="0" v-model.number="item.discount" class="form-input" /></td>
+                    <td><strong>{{ formatRp((item.quantity * item.unit_price) - item.discount) }}</strong></td>
+                    <td><button type="button" class="btn btn-danger btn-sm" @click="posCart.splice(idx, 1)">Hapus</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="flex gap-2 mt-3">
+              <button type="button" class="btn btn-ghost" @click="posCart.push({ product_id: '', quantity: 1, unit_price: 0, discount: 0 })">+ Tambah Item</button>
+              <button type="button" class="btn btn-primary" :disabled="loading || !posCart.length" @click="submitPosSale">Proses Penjualan (Stok FIFO &amp; Jurnal SAK EMKM)</button>
+            </div>
+          </div>
+        </section>
+
+        <section v-if="page==='product-serials'">
+          <div class="page-head">
+            <div>
+              <h2 class="brand">IMEI &amp; Serial Number</h2>
+              <p>Daftar dan status unit IMEI per cabang</p>
+            </div>
+          </div>
+          <div class="card p-4">
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>IMEI / SN</th>
+                    <th>Produk</th>
+                    <th>Cabang</th>
+                    <th>Harga Beli</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="s in posSerials" :key="s.id">
+                    <td><code>{{ s.serial_number }}</code></td>
+                    <td>{{ s.product?.name }}</td>
+                    <td>{{ s.branch?.name }}</td>
+                    <td>{{ formatRp(s.purchase_price) }}</td>
+                    <td><span class="badge" :class="s.status === 'in_stock' ? 'badge-approved' : 'badge-pending'">{{ s.status }}</span></td>
+                  </tr>
+                  <tr v-if="!posSerials.length">
+                    <td colspan="5">Belum ada serial number terdaftar.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section v-if="page==='customers'">
+          <div class="page-head">
+            <div>
+              <h2 class="brand">Pelanggan &amp; Program Loyalty</h2>
+              <p>Daftar pelanggan dan akumulasi poin reward</p>
+            </div>
+          </div>
+          <div class="card p-4">
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Nama Pelanggan</th>
+                    <th>No. WhatsApp</th>
+                    <th>Tipe Pelanggan</th>
+                    <th>Total Poin</th>
+                    <th>Status WA</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="c in posCustomers" :key="c.id">
+                    <td><strong>{{ c.name }}</strong></td>
+                    <td>{{ c.phone }}</td>
+                    <td><span class="badge badge-info">{{ c.customer_type }}</span></td>
+                    <td><strong>{{ c.total_points || 0 }} Poin</strong></td>
+                    <td>{{ c.whatsapp_opt_in ? 'Opt-In' : 'Tidak' }}</td>
+                  </tr>
+                  <tr v-if="!posCustomers.length">
+                    <td colspan="5">Belum ada data pelanggan.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section v-if="page==='employee-points'">
+          <div class="page-head">
+            <div>
+              <h2 class="brand">Poin &amp; Komisi Karyawan</h2>
+              <p>Perhitungan Poin (Rp 10.000 = 1 Poin = Rp 1.000 Bonus)</p>
+            </div>
+          </div>
+          <div class="card p-4">
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Nama Karyawan</th>
+                    <th>Posisi</th>
+                    <th>Cabang</th>
+                    <th>Total Poin</th>
+                    <th>Estimasi Bonus (Rp)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="ep in posEmployeePoints" :key="ep.employee_id">
+                    <td><strong>{{ ep.name }}</strong></td>
+                    <td>{{ ep.position }}</td>
+                    <td>{{ ep.branch }}</td>
+                    <td><strong>{{ ep.total_points }} Poin</strong></td>
+                    <td><strong class="text-teal">{{ formatRp(ep.bonus_rupiah) }}</strong></td>
+                  </tr>
+                  <tr v-if="!posEmployeePoints.length">
+                    <td colspan="5">Belum ada data poin karyawan.</td>
                   </tr>
                 </tbody>
               </table>

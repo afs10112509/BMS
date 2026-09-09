@@ -311,6 +311,50 @@ Route::middleware(['auth:sanctum', 'admin.branch', 'block.employee'])->group(fun
     Route::get("/sales/{sale}", [SaleController::class, "show"]);
     Route::post("/sales/{sale}/cancel", [SaleController::class, "cancel"]);
 
+    // IMEI & Serial Numbers
+    Route::get("/product-serials", [\App\Http\Controllers\Api\ProductSerialController::class, "index"]);
+    Route::post("/product-serials", [\App\Http\Controllers\Api\ProductSerialController::class, "store"]);
+
+    // Stock Transfers antar cabang
+    Route::get("/stock-transfers", [\App\Http\Controllers\Api\StockTransferController::class, "index"]);
+    Route::post("/stock-transfers", [\App\Http\Controllers\Api\StockTransferController::class, "store"]);
+    Route::post("/stock-transfers/{stockTransfer}/approve", [\App\Http\Controllers\Api\StockTransferController::class, "approve"]);
+    Route::post("/stock-transfers/{stockTransfer}/receive", [\App\Http\Controllers\Api\StockTransferController::class, "receive"]);
+    Route::post("/stock-transfers/{stockTransfer}/reject", [\App\Http\Controllers\Api\StockTransferController::class, "reject"]);
+
+    // Customer Management & Loyalty Points
+    Route::get("/customers", [\App\Http\Controllers\Api\CustomerController::class, "index"]);
+    Route::post("/customers", [\App\Http\Controllers\Api\CustomerController::class, "store"]);
+    Route::get("/customers/{customer}", [\App\Http\Controllers\Api\CustomerController::class, "show"]);
+    Route::put("/customers/{customer}", [\App\Http\Controllers\Api\CustomerController::class, "update"]);
+    Route::post("/customers/{customer}/points", [\App\Http\Controllers\Api\CustomerController::class, "addPoints"]);
+
+    // Employee Points & Commission (10k = 1 pt = 1k bonus)
+    Route::get("/employee-points", [\App\Http\Controllers\Api\EmployeePointController::class, "index"]);
+    Route::post("/employee-points", [\App\Http\Controllers\Api\EmployeePointController::class, "store"]);
+    Route::get("/employee-points/summary", [\App\Http\Controllers\Api\EmployeePointController::class, "summary"]);
+
+    // Laporan Akuntansi SAK EMKM
+    Route::get("/reports/emkm/general-ledger", [\App\Http\Controllers\Api\EmkmReportController::class, "generalLedger"]);
+    Route::get("/reports/emkm/trial-balance", [\App\Http\Controllers\Api\EmkmReportController::class, "trialBalance"]);
+    Route::get("/reports/emkm/income-statement", [\App\Http\Controllers\Api\EmkmReportController::class, "incomeStatement"]);
+
+    // Brands / Merk
+    Route::get("/brands", [\App\Http\Controllers\Api\BrandController::class, "index"]);
+    Route::post("/brands", [\App\Http\Controllers\Api\BrandController::class, "store"]);
+
+    // Suppliers
+    Route::get("/suppliers", [\App\Http\Controllers\Api\SupplierController::class, "index"]);
+    Route::post("/suppliers", [\App\Http\Controllers\Api\SupplierController::class, "store"]);
+
+    // Tarif & Jenis Servis
+    Route::get("/service-types", [\App\Http\Controllers\Api\ServiceTypeController::class, "index"]);
+    Route::post("/service-types", [\App\Http\Controllers\Api\ServiceTypeController::class, "store"]);
+
+    // Rekening Bank & EDC
+    Route::get("/bank-accounts", [\App\Http\Controllers\Api\BankAccountController::class, "index"]);
+    Route::post("/bank-accounts", [\App\Http\Controllers\Api\BankAccountController::class, "store"]);
+
 });
 
 Route::get('/reports/{type}/pdf-file', [ReportController::class, 'pdfFile'])

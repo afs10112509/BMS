@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\StockMovement;
 use App\Services\AuditLogger;
 use App\Services\BranchContext;
+use App\Services\FifoStockService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,6 +17,7 @@ class ProductController extends Controller
     public function __construct(
         protected AuditLogger $auditLogger,
         protected BranchContext $branchContext,
+        protected FifoStockService $fifoStockService,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -71,6 +73,9 @@ class ProductController extends Controller
     {
         $data = $request->validate([
             'sku' => 'nullable|string|max:255|unique:products,sku',
+            'barcode' => 'nullable|string|max:255|unique:products,barcode',
+            'base_unit' => 'nullable|string|max:50',
+            'requires_serial' => 'boolean',
             'name' => 'required|string|max:255',
             'type' => 'required|in:phone,accessory,spare_part,other',
             'description' => 'nullable|string',
@@ -80,7 +85,12 @@ class ProductController extends Controller
             'selling_price' => 'required|numeric|min:0',
             'stock_quantity' => 'integer|min:0',
             'min_stock' => 'integer|min:0',
+            'max_stock' => 'nullable|integer|min:0',
             'supplier_id' => 'nullable|exists:suppliers,id',
+            'image_url' => 'nullable|string',
+            'allow_open_price' => 'nullable|boolean',
+            'allow_open_discount' => 'nullable|boolean',
+            'show_stock_reminder' => 'nullable|boolean',
         ]);
 
         $resolved = $this->branchContext->resolve($request->user(), $request->integer('branch_id'));
@@ -113,8 +123,15 @@ class ProductController extends Controller
 
         $product = Product::create($data);
 
-        // Catat stok awal
+        // Catat stok awal & Batch FIFO
         if (($data['stock_quantity'] ?? 0) > 0) {
+            $this->fifoStockService->addStockBatch(
+                $product,
+                $branchId,
+                $product->stock_quantity,
+                $product->cost_price
+            );
+
             StockMovement::create([
                 'product_id' => $product->id,
                 'branch_id' => $branchId,
@@ -122,7 +139,7 @@ class ProductController extends Controller
                 'quantity' => $product->stock_quantity,
                 'stock_before' => 0,
                 'stock_after' => $product->stock_quantity,
-                'notes' => 'Stok awal',
+                'notes' => 'Stok awal master produk',
                 'created_by' => $request->user()->id,
             ]);
         }
