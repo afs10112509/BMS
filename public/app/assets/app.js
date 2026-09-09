@@ -1759,11 +1759,16 @@ const app = createApp({
       loginError.value = '';
       loading.value = true;
       try {
+        const emailEl = document.getElementById('login-email');
+        const passEl = document.getElementById('login-password');
+        const emailVal = (emailEl?.value || loginForm.email || '').trim();
+        const passVal = (passEl?.value || loginForm.password || '').trim();
+
         const data = await api('/auth/login', {
           method: 'POST',
           body: JSON.stringify({
-            email: (loginForm.email || '').trim(),
-            password: (loginForm.password || '').trim(),
+            email: emailVal,
+            password: passVal,
           }),
         });
         persistAuth(data.token, data.user);

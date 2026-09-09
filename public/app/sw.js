@@ -1,5 +1,5 @@
 /* BMS PWA service worker — cache ringan agar bisa di-install ke layar utama */
-const CACHE = 'bms-shell-v20260909-v48-login-trim-and-throttle';
+const CACHE = 'bms-shell-v20260909-v49-network-first-autofill-fix';
 const PRECACHE = [
   '/app/',
   '/app/index.html',
@@ -30,35 +30,16 @@ self.addEventListener('fetch', (event) => {
   // Jangan cache API / auth — selalu jaringan.
   if (url.pathname.startsWith('/api/')) return;
 
-  // Navigasi SPA: network-first, fallback cache shell.
-  if (req.mode === 'navigate') {
-    event.respondWith(
-      fetch(req)
-        .then((res) => {
+  // Navigasi & Aset app: network-first agar update kodingan langsung aktif di browser.
+  event.respondWith(
+    fetch(req)
+      .then((res) => {
+        if (res && res.ok) {
           const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put('/app/index.html', copy)).catch(() => {});
-          return res;
-        })
-        .catch(() => caches.match('/app/index.html'))
-    );
-    return;
-  }
-
-  // Aset app: stale-while-revalidate ringan.
-  if (url.pathname.startsWith('/app/')) {
-    event.respondWith(
-      caches.match(req).then((cached) => {
-        const network = fetch(req)
-          .then((res) => {
-            if (res && res.ok) {
-              const copy = res.clone();
-              caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
-            }
-            return res;
-          })
-          .catch(() => cached);
-        return cached || network;
+          caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+        }
+        return res;
       })
-    );
-  }
+      .catch(() => caches.match(req).then((cached) => cached || caches.match('/app/index.html')))
+  );
 });
