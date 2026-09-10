@@ -5962,7 +5962,7 @@ const app = createApp({
     }
 
     async function submitTxDayEditSync(items) {
-      const date = txDayEdit.date || txForm.transaction_date;
+      const date = txForm.transaction_date || txDayEdit.date;
       const keptIds = new Set(items.filter((it) => it.id).map((it) => Number(it.id)));
       const toDelete = (txDayEdit.originalIds || []).filter((id) => !keptIds.has(Number(id)));
 
@@ -9870,7 +9870,7 @@ const app = createApp({
               <div class="tx-form-top">
                 <div class="field">
                   <label>Tanggal</label>
-                  <input type="date" v-model="txForm.transaction_date" :disabled="periodLocked || txDayEdit.active" />
+                  <input type="date" v-model="txForm.transaction_date" :disabled="periodLocked" />
                 </div>
                 <div v-if="isOwner" class="field">
                   <label>Cabang</label>
