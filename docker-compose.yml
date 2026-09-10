@@ -1,35 +1,32 @@
 services:
-  bms-php-dev:
+  bms-php:
     build: .
-    container_name: bms-php-dev
+    container_name: bms-php
     restart: unless-stopped
     volumes:
       - .:/var/www/html
     env_file:
       - .env
     networks:
-      apps-network:
-        aliases:
-          - bms-php
-          - bms-php-dev
+      - apps-network
 
-  bms-nginx-dev:
+  bms-nginx:
     image: nginx:alpine
-    container_name: bms-nginx-dev
+    container_name: bms-nginx
     restart: unless-stopped
     ports:
-      - "8083:80"
+      - "8082:80"
     volumes:
       - .:/var/www/html:ro
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
-      - bms-php-dev
+      - bms-php
     networks:
       - apps-network
 
-  bms-queue-dev:
+  bms-queue:
     build: .
-    container_name: bms-queue-dev
+    container_name: bms-queue
     restart: unless-stopped
     command: php artisan queue:work database --sleep=3 --tries=3 --max-time=3600
     volumes:
@@ -37,27 +34,23 @@ services:
     env_file:
       - .env
     depends_on:
-      - bms-php-dev
+      - bms-php
     networks:
       - apps-network
 
-  postgres-dev:
-    image: postgres:15
-    container_name: postgres-dev
+  bms-scheduler:
+    build: .
+    container_name: bms-scheduler
     restart: unless-stopped
-    environment:
-      POSTGRES_DB: bms_dev
-      POSTGRES_USER: bms_user
-      POSTGRES_PASSWORD: bms_password_dev_only
+    command: php artisan schedule:work
     volumes:
-      - postgres-dev-data:/var/lib/postgresql/data
+      - .:/var/www/html
+    env_file:
+      - .env
+    depends_on:
+      - bms-php
     networks:
       - apps-network
-    ports:
-      - "5433:5432"
-
-volumes:
-  postgres-dev-data:
 
 networks:
   apps-network:
